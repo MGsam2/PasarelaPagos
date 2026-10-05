@@ -1,0 +1,30 @@
+# Java / Maven
+backend/target/
+*.class
+
+# Spring Boot
+*.log
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# IntelliJ / Eclipse
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+
+# Node / React
+frontend/node_modules/
+frontend/dist/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
