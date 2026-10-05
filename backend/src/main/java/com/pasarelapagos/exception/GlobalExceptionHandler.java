@@ -1,5 +1,6 @@
 package com.pasarelapagos.exception;
 
+import com.pasarelapagos.iso8583.IsoConstants;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -19,7 +20,9 @@ public class GlobalExceptionHandler {
                 "timestamp", LocalDateTime.now(),
                 "status", 404,
                 "error", "NOT_FOUND",
-                "message", exception.getMessage()
+                "message", exception.getMessage(),
+                "codigoRespuesta",
+                IsoConstants.RESPONSE_INVALID_ACCOUNT
         );
 
         return ResponseEntity

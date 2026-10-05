@@ -3,6 +3,7 @@ package com.pasarelapagos.iso8583;
 import com.pasarelapagos.dto.PagoRequest;
 import com.pasarelapagos.dto.PagoResponse;
 import com.pasarelapagos.entity.Transaccion;
+import com.pasarelapagos.exception.RecursoNoEncontradoException;
 import com.pasarelapagos.service.PagoService;
 import org.jpos.iso.ISOMsg;
 import org.springframework.stereotype.Service;
@@ -29,48 +30,44 @@ public class IsoTransactionService {
     }
 
     @Transactional
-    public byte[] procesar(byte[] mensajeIso) throws Exception {
+    public byte[] procesar(byte[] mensajeIso)
+            throws Exception {
 
-        /*
-         * 1. Recibir y desempaquetar el mensaje ISO 8583.
-         */
-        ISOMsg solicitud = isoParser.unpack(mensajeIso);
+        ISOMsg solicitud =
+                isoParser.unpack(mensajeIso);
 
-        /*
-         * 2. Convertir ISO 8583 -> PagoRequest.
-         */
-        PagoRequest pagoRequest =
-                isoToPagoMapper.convertir(solicitud);
+        try {
 
-        /*
-         * 3. Ejecutar la lógica de negocio.
-         */
-        Transaccion transaccion =
-                pagoService.realizarPago(
-                        pagoRequest.getCuentaId(),
-                        pagoRequest.getMonto(),
-                        pagoRequest.getStan()
-                );
+            PagoRequest pagoRequest =
+                    isoToPagoMapper.convertir(solicitud);
 
-        /*
-         * 4. Convertir la Transaccion a PagoResponse.
-         */
-        PagoResponse pagoResponse =
-                new PagoResponse(transaccion);
+            Transaccion transaccion =
+                    pagoService.realizarPago(
+                            pagoRequest.getCuentaId(),
+                            pagoRequest.getMonto(),
+                            pagoRequest.getStan()
+                    );
 
-        /*
-         * 5. Convertir PagoResponse -> ISO 0210.
-         */
-        ISOMsg respuesta =
-                isoResponseMapper.convertir(
-                        pagoResponse,
-                        solicitud
-                );
+            PagoResponse pagoResponse =
+                    new PagoResponse(transaccion);
 
-        /*
-         * 6. Empaquetar ISO 0210 para devolverlo
-         *    al sistema que originó la transacción.
-         */
-        return isoParser.pack(respuesta);
+            ISOMsg respuesta =
+                    isoResponseMapper.convertir(
+                            pagoResponse,
+                            solicitud
+                    );
+
+            return isoParser.pack(respuesta);
+
+        } catch (RecursoNoEncontradoException exception) {
+
+            ISOMsg respuesta =
+                    isoResponseMapper.crearRespuestaError(
+                            solicitud,
+                            IsoConstants.RESPONSE_INVALID_ACCOUNT
+                    );
+
+            return isoParser.pack(respuesta);
+        }
     }
 }
