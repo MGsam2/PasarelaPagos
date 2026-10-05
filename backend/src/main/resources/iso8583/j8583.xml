@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE j8583-config PUBLIC "-//J8583//DTD CONFIG 1.0//EN"
+    "http://j8583.sourceforge.net/j8583.dtd">
+
+<j8583-config>
+
+    <!-- ===================================================== -->
+    <!-- MENSAJE 0200 - SOLICITUD DE PAGO                     -->
+    <!-- ===================================================== -->
+
+    <template type="0200">
+
+        <!-- DE3 - Processing Code -->
+        <field num="3" type="NUMERIC" length="6">000000</field>
+
+        <!-- DE49 - Currency Code -->
+        <field num="49" type="NUMERIC" length="3">320</field>
+
+    </template>
+
+
+    <!-- ===================================================== -->
+    <!-- MENSAJE 0210 - RESPUESTA DE PAGO                     -->
+    <!-- ===================================================== -->
+
+    <template type="0210">
+
+        <!-- DE39 - Response Code -->
+        <field num="39" type="NUMERIC" length="2">00</field>
+
+    </template>
+
+
+    <!-- ===================================================== -->
+    <!-- CAMPOS QUE j8583 DEBE SABER INTERPRETAR               -->
+    <!-- ===================================================== -->
+
+    <parse type="0200">
+
+        <!-- DE2 - PAN -->
+        <field num="2" type="LLVAR"/>
+
+        <!-- DE3 - Processing Code -->
+        <field num="3" type="NUMERIC" length="6"/>
+
+        <!-- DE4 - Amount -->
+        <field num="4" type="NUMERIC" length="12"/>
+
+        <!-- DE7 - Transmission Date/Time -->
+        <field num="7" type="NUMERIC" length="10"/>
+
+        <!-- DE11 - STAN -->
+        <field num="11" type="NUMERIC" length="6"/>
+
+        <!-- DE12 - Local Transaction Time -->
+        <field num="12" type="NUMERIC" length="6"/>
+
+        <!-- DE13 - Local Transaction Date -->
+        <field num="13" type="NUMERIC" length="4"/>
+
+        <!-- DE37 - Retrieval Reference -->
+        <field num="37" type="ALPHA" length="12"/>
+
+        <!-- DE41 - Terminal ID -->
+        <field num="41" type="ALPHA" length="8"/>
+
+        <!-- DE42 - Merchant ID -->
+        <field num="42" type="ALPHA" length="15"/>
+
+        <!-- DE49 - Currency -->
+        <field num="49" type="NUMERIC" length="3"/>
+
+        <!-- DE70 - Network Management -->
+        <field num="70" type="NUMERIC" length="3"/>
+
+    </parse>
+
+
+    <!-- ===================================================== -->
+    <!-- CAMPOS DE LA RESPUESTA 0210                           -->
+    <!-- ===================================================== -->
+
+    <parse type="0210">
+
+        <!-- DE2 - PAN -->
+        <field num="2" type="LLVAR"/>
+
+        <!-- DE3 - Processing Code -->
+        <field num="3" type="NUMERIC" length="6"/>
+
+        <!-- DE4 - Amount -->
+        <field num="4" type="NUMERIC" length="12"/>
+
+        <!-- DE11 - STAN -->
+        <field num="11" type="NUMERIC" length="6"/>
+
+        <!-- DE39 - Response Code -->
+        <field num="39" type="NUMERIC" length="2"/>
+
+        <!-- DE41 - Terminal ID -->
+        <field num="41" type="ALPHA" length="8"/>
+
+        <!-- DE49 - Currency -->
+        <field num="49" type="NUMERIC" length="3"/>
+
+        <!-- DE70 - Network Management -->
+        <field num="70" type="NUMERIC" length="3"/>
+
+    </parse>
+
+</j8583-config>
