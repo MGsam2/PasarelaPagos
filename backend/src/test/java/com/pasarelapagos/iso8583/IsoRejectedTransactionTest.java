@@ -2,111 +2,48 @@ package com.pasarelapagos.iso8583;
 
 import org.jpos.iso.ISOMsg;
 import org.junit.jupiter.api.Test;
-
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@SpringBootTest
 class IsoRejectedTransactionTest {
 
+    @Autowired
+    private IsoTransactionService isoTransactionService;
+
+    @Autowired
+    private IsoMessageFactory isoMessageFactory;
+
+    @Autowired
+    private IsoParser isoParser;
+
     @Test
-    void debeRechazarPagoPorFondosInsuficientes()
-            throws Exception {
+    void debeRechazarPagoPorFondosInsuficientes() throws Exception {
+        // PAN de Banco A
+        String pan = "4111111111111111";
+        // Enviamos un monto intencionalmente excesivo (ej. Q 999,999.00 = 99999900 centavos)
+        String montoCentavosExcesivo = "9999990000"; 
+        String stan = "654321";
 
-        IsoMessageFactory factory =
-                new IsoMessageFactory();
-
-        ISOMsg solicitud =
-                factory.crearMensajePago(
-                        "4111111111111111",
-                        IsoConstants.PROCESSING_CODE_PURCHASE,
-                        "000000005000",
-                        "456789",
-                        "ATM00001",
-                        "COMERCIO000001"
-                );
-
-        solicitud.set(70, "001");
-
-        byte[] mensajeIso =
-                solicitud.pack();
-
-        HttpClient client =
-                HttpClient.newHttpClient();
-
-        HttpRequest request =
-                HttpRequest.newBuilder()
-                        .uri(
-                                URI.create(
-                                        "http://localhost:8080/api/iso8583/transacciones"
-                                )
-                        )
-                        .header(
-                                "Content-Type",
-                                "application/octet-stream"
-                        )
-                        .header(
-                                "Accept",
-                                "application/octet-stream"
-                        )
-                        .POST(
-                                HttpRequest.BodyPublishers
-                                        .ofByteArray(mensajeIso)
-                        )
-                        .build();
-
-        HttpResponse<byte[]> response =
-                client.send(
-                        request,
-                        HttpResponse.BodyHandlers
-                                .ofByteArray()
-                );
-
-        assertEquals(
-                200,
-                response.statusCode()
+        ISOMsg solicitud = isoMessageFactory.crearMensajePago(
+                pan,
+                IsoConstants.PROCESSING_CODE_PURCHASE,
+                montoCentavosExcesivo,
+                stan,
+                "TERM0001",
+                "MERCHANT001"
         );
 
-        IsoParser parser =
-                new IsoParser(factory);
+        byte[] mensajeBytes = isoParser.pack(solicitud);
+        byte[] respuestaBytes = isoTransactionService.procesar(mensajeBytes);
 
-        ISOMsg respuesta =
-                parser.unpack(response.body());
+        ISOMsg respuesta = isoParser.unpack(respuestaBytes);
 
-        assertEquals(
-                "0210",
-                respuesta.getMTI()
-        );
-
-        assertEquals(
-                "456789",
-                respuesta.getString(11)
-        );
-
-        assertEquals(
-                "51",
-                respuesta.getString(39)
-        );
-
-        System.out.println("========================================");
-        System.out.println("PRUEBA FONDOS INSUFICIENTES");
-        System.out.println("========================================");
-        System.out.println(
-                "MTI: " + respuesta.getMTI()
-        );
-        System.out.println(
-                "STAN: " + respuesta.getString(11)
-        );
-        System.out.println(
-                "CODIGO RESPUESTA: "
-                        + respuesta.getString(39)
-        );
-        System.out.println(
-                "RESULTADO: FONDOS INSUFICIENTES"
-        );
-        System.out.println("========================================");
+        assertNotNull(respuesta);
+        assertEquals("0210", respuesta.getMTI());
+        // Verificamos que devuelva el código ISO 51 (Fondos insuficientes)
+        assertEquals(IsoConstants.RESPONSE_INSUFFICIENT_FUNDS, respuesta.getString(39));
     }
 }

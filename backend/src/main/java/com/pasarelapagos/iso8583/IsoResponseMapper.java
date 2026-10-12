@@ -56,14 +56,14 @@ public class IsoResponseMapper {
         // STAN
         if (mensajeSolicitud.hasField(11)) {
             respuesta.set(11, mensajeSolicitud.getString(11));
-        } else if (pagoResponse.getStan() != null) {
-            respuesta.set(11, pagoResponse.getStan());
+        } else if (pagoResponse.stan() != null) {
+            respuesta.set(11, pagoResponse.stan());
         }
 
         // Código de respuesta
         respuesta.set(
                 39,
-                pagoResponse.getCodigoRespuesta()
+                pagoResponse.codigoRespuesta()
         );
 
         if (mensajeSolicitud.hasField(41)) {
@@ -78,80 +78,158 @@ public class IsoResponseMapper {
     }
 
     public ISOMsg crearRespuestaError(
-        ISOMsg mensajeSolicitud,
-        String codigoRespuesta) throws Exception {
+            ISOMsg mensajeSolicitud,
+            String codigoRespuesta) throws Exception {
 
-    if (mensajeSolicitud == null) {
-        throw new IllegalArgumentException(
-                "El mensaje ISO de solicitud no puede ser null"
+        if (mensajeSolicitud == null) {
+            throw new IllegalArgumentException(
+                    "El mensaje ISO de solicitud no puede ser null"
+            );
+        }
+
+        if (codigoRespuesta == null
+                || codigoRespuesta.length() != 2) {
+
+            throw new IllegalArgumentException(
+                    "El código de respuesta ISO debe tener 2 caracteres"
+            );
+        }
+
+        ISOMsg respuesta = new ISOMsg();
+
+        respuesta.setPackager(
+                isoMessageFactory.getPackager()
         );
-    }
 
-    if (codigoRespuesta == null
-            || codigoRespuesta.length() != 2) {
-
-        throw new IllegalArgumentException(
-                "El código de respuesta ISO debe tener 2 caracteres"
+        respuesta.setMTI(
+                IsoConstants.MTI_FINANCIAL_RESPONSE
         );
-    }
 
-    ISOMsg respuesta = new ISOMsg();
+        if (mensajeSolicitud.hasField(2)) {
+            respuesta.set(
+                    2,
+                    mensajeSolicitud.getString(2)
+            );
+        }
 
-    respuesta.setPackager(
-            isoMessageFactory.getPackager()
-    );
+        if (mensajeSolicitud.hasField(3)) {
+            respuesta.set(
+                    3,
+                    mensajeSolicitud.getString(3)
+            );
+        }
 
-    respuesta.setMTI(
-            IsoConstants.MTI_FINANCIAL_RESPONSE
-    );
+        if (mensajeSolicitud.hasField(4)) {
+            respuesta.set(
+                    4,
+                    mensajeSolicitud.getString(4)
+            );
+        }
 
-    if (mensajeSolicitud.hasField(2)) {
+        if (mensajeSolicitud.hasField(11)) {
+            respuesta.set(
+                    11,
+                    mensajeSolicitud.getString(11)
+            );
+        }
+
         respuesta.set(
-                2,
-                mensajeSolicitud.getString(2)
+                39,
+                codigoRespuesta
         );
+
+        if (mensajeSolicitud.hasField(41)) {
+            respuesta.set(
+                    41,
+                    mensajeSolicitud.getString(41)
+            );
+        }
+
+        if (mensajeSolicitud.hasField(49)) {
+            respuesta.set(
+                    49,
+                    mensajeSolicitud.getString(49)
+            );
+        }
+
+        return respuesta;
     }
 
-    if (mensajeSolicitud.hasField(3)) {
+    public ISOMsg crearRespuestaDesdeCodigo(
+            ISOMsg mensajeSolicitud,
+            String codigoRespuesta) throws Exception {
+
+        if (mensajeSolicitud == null) {
+            throw new IllegalArgumentException(
+                    "El mensaje ISO de solicitud no puede ser null"
+            );
+        }
+
+        if (codigoRespuesta == null
+                || codigoRespuesta.length() != 2) {
+
+            throw new IllegalArgumentException(
+                    "El código de respuesta ISO debe tener 2 caracteres"
+            );
+        }
+
+        ISOMsg respuesta = new ISOMsg();
+
+        respuesta.setPackager(
+                isoMessageFactory.getPackager()
+        );
+
+        respuesta.setMTI(
+                IsoConstants.MTI_FINANCIAL_RESPONSE
+        );
+
+        if (mensajeSolicitud.hasField(2)) {
+            respuesta.set(
+                    2,
+                    mensajeSolicitud.getString(2)
+            );
+        }
+
+        if (mensajeSolicitud.hasField(3)) {
+            respuesta.set(
+                    3,
+                    mensajeSolicitud.getString(3)
+            );
+        }
+
+        if (mensajeSolicitud.hasField(4)) {
+            respuesta.set(
+                    4,
+                    mensajeSolicitud.getString(4)
+            );
+        }
+
+        if (mensajeSolicitud.hasField(11)) {
+            respuesta.set(
+                    11,
+                    mensajeSolicitud.getString(11)
+            );
+        }
+
         respuesta.set(
-                3,
-                mensajeSolicitud.getString(3)
+                39,
+                codigoRespuesta
         );
+
+        if (mensajeSolicitud.hasField(41)) {
+            respuesta.set(
+                    41,
+                    mensajeSolicitud.getString(41)
+            );
+        }
+
+        if (mensajeSolicitud.hasField(49)) {
+            respuesta.set(
+                    49,
+                    mensajeSolicitud.getString(49)
+            );
+        }
+
+        return respuesta;
     }
-
-    if (mensajeSolicitud.hasField(4)) {
-        respuesta.set(
-                4,
-                mensajeSolicitud.getString(4)
-        );
-    }
-
-    if (mensajeSolicitud.hasField(11)) {
-        respuesta.set(
-                11,
-                mensajeSolicitud.getString(11)
-        );
-    }
-
-    respuesta.set(
-            39,
-            codigoRespuesta
-    );
-
-    if (mensajeSolicitud.hasField(41)) {
-        respuesta.set(
-                41,
-                mensajeSolicitud.getString(41)
-        );
-    }
-
-    if (mensajeSolicitud.hasField(49)) {
-        respuesta.set(
-                49,
-                mensajeSolicitud.getString(49)
-        );
-    }
-
-    return respuesta;
-}
 }

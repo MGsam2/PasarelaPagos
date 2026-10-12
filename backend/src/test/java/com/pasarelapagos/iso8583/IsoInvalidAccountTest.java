@@ -2,6 +2,8 @@ package com.pasarelapagos.iso8583;
 
 import org.jpos.iso.ISOMsg;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -10,7 +12,13 @@ import java.net.http.HttpResponse;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
+)
 class IsoInvalidAccountTest {
+
+    @LocalServerPort
+    private int port;
 
     @Test
     void debeRechazarPanInexistente()
@@ -37,13 +45,14 @@ class IsoInvalidAccountTest {
         HttpClient client =
                 HttpClient.newHttpClient();
 
+        String url =
+                "http://localhost:"
+                        + port
+                        + "/api/iso8583/transacciones";
+
         HttpRequest request =
                 HttpRequest.newBuilder()
-                        .uri(
-                                URI.create(
-                                        "http://localhost:8080/api/iso8583/transacciones"
-                                )
-                        )
+                        .uri(URI.create(url))
                         .header(
                                 "Content-Type",
                                 "application/octet-stream"
@@ -104,6 +113,9 @@ class IsoInvalidAccountTest {
         );
         System.out.println(
                 "========================================"
+        );
+        System.out.println(
+                "PUERTO TEST: " + port
         );
         System.out.println(
                 "HTTP STATUS: "

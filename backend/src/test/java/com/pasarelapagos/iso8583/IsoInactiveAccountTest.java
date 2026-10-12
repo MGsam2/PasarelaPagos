@@ -6,6 +6,7 @@ import org.jpos.iso.ISOMsg;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -14,8 +15,13 @@ import java.net.http.HttpResponse;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
+)
 class IsoInactiveAccountTest {
+
+    @LocalServerPort
+    private int port;
 
     @Autowired
     private CuentaRepository cuentaRepository;
@@ -59,13 +65,14 @@ class IsoInactiveAccountTest {
             HttpClient client =
                     HttpClient.newHttpClient();
 
+            String url =
+                    "http://localhost:"
+                            + port
+                            + "/api/iso8583/transacciones";
+
             HttpRequest request =
                     HttpRequest.newBuilder()
-                            .uri(
-                                    URI.create(
-                                            "http://localhost:8080/api/iso8583/transacciones"
-                                    )
-                            )
+                            .uri(URI.create(url))
                             .header(
                                     "Content-Type",
                                     "application/octet-stream"
@@ -121,6 +128,9 @@ class IsoInactiveAccountTest {
             );
             System.out.println(
                     "========================================"
+            );
+            System.out.println(
+                    "PUERTO TEST: " + port
             );
             System.out.println(
                     "MTI: " + respuesta.getMTI()

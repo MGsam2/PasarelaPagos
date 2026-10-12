@@ -1,9 +1,6 @@
 package com.pasarelapagos.iso8583;
 
 import com.pasarelapagos.dto.PagoRequest;
-import com.pasarelapagos.entity.Cuenta;
-import com.pasarelapagos.exception.RecursoNoEncontradoException;
-import com.pasarelapagos.repository.CuentaRepository;
 import org.jpos.iso.ISOMsg;
 import org.springframework.stereotype.Component;
 
@@ -12,12 +9,6 @@ import java.math.BigDecimal;
 @Component
 public class IsoToPagoMapper {
 
-    private final CuentaRepository cuentaRepository;
-
-    public IsoToPagoMapper(CuentaRepository cuentaRepository) {
-        this.cuentaRepository = cuentaRepository;
-    }
-
     public PagoRequest convertir(ISOMsg mensaje) throws Exception {
 
         validarMensaje(mensaje);
@@ -25,27 +16,16 @@ public class IsoToPagoMapper {
         String pan = mensaje.getString(2);
         String montoIso = mensaje.getString(4);
         String stan = mensaje.getString(11);
+        
+        // DE 37 - RRN (Retrieval Reference Number)
+        String rrn = mensaje.hasField(37) ? mensaje.getString(37) : null;
+        
+        // DE 102 - Cuenta Origen
+        String cuentaOrigen = mensaje.hasField(102) ? mensaje.getString(102) : null;
 
         BigDecimal monto = convertirMonto(montoIso);
 
-        /*
-         * Buscamos la cuenta real utilizando
-         * el PAN recibido en DE2.
-         */
-        Cuenta cuenta = cuentaRepository.findByPan(pan)
-                .orElseThrow(() ->
-                        new RecursoNoEncontradoException(
-                                "No existe una cuenta asociada al PAN"
-                        )
-                );
-
-        PagoRequest request = new PagoRequest();
-
-        request.setCuentaId(cuenta.getId());
-        request.setMonto(monto);
-        request.setStan(stan);
-
-        return request;
+        return new PagoRequest(pan, monto, stan, rrn, cuentaOrigen);
     }
 
     private void validarMensaje(ISOMsg mensaje) throws Exception {

@@ -31,11 +31,19 @@ public class PagoController {
     public ResponseEntity<PagoResponse> realizarPago(
             @Valid @RequestBody PagoRequest request) {
 
+        Cuenta cuenta =
+                cuentaRepository.findByPan(request.pan())
+                        .orElseThrow(() ->
+                                new RecursoNoEncontradoException(
+                                        "No existe una cuenta asociada al PAN"
+                                )
+                        );
+
         Transaccion transaccion =
                 pagoService.realizarPago(
-                        request.getCuentaId(),
-                        request.getMonto(),
-                        request.getStan()
+                        cuenta.getId(),
+                        request.monto(),
+                        request.stan()
                 );
 
         return ResponseEntity.ok(
@@ -48,7 +56,7 @@ public class PagoController {
             @Valid @RequestBody PagoTarjetaRequest request) {
 
         Cuenta cuenta =
-                cuentaRepository.findByPan(request.getPan())
+                cuentaRepository.findByPan(request.pan())
                         .orElseThrow(() ->
                                 new RecursoNoEncontradoException(
                                         "No existe una cuenta asociada a la tarjeta"
@@ -58,8 +66,8 @@ public class PagoController {
         Transaccion transaccion =
                 pagoService.realizarPago(
                         cuenta.getId(),
-                        request.getMonto(),
-                        request.getStan()
+                        request.monto(),
+                        request.stan()
                 );
 
         return ResponseEntity.ok(

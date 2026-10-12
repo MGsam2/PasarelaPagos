@@ -1,89 +1,60 @@
 package com.pasarelapagos.iso8583;
 
 import com.pasarelapagos.dto.PagoRequest;
-import com.pasarelapagos.entity.Cuenta;
-import com.pasarelapagos.repository.CuentaRepository;
 import org.jpos.iso.ISOMsg;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 
 import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
 class IsoToPagoMapperTest {
 
-    @Autowired
     private IsoToPagoMapper isoToPagoMapper;
+    private IsoMessageFactory isoMessageFactory;
 
-    @Autowired
-    private CuentaRepository cuentaRepository;
+    @BeforeEach
+    void setUp() throws Exception {
+        isoMessageFactory = new IsoMessageFactory();
+        isoToPagoMapper = new IsoToPagoMapper();
+    }
 
     @Test
-    void debeConvertirIsoAPagoRequestUsandoPan() throws Exception {
-
+    void deberiaConvertirMensajeIsoAPagoRequestExitosamente() throws Exception {
+        // Arrange
         String pan = "4111111111111111";
+        String montoCentavos = "000000003000"; // Q 30.00
+        String stan = "123456";
+        String terminal = "TERM0001";
+        String merchant = "MERCHANT001";
 
-        Cuenta cuenta = cuentaRepository.findByPan(pan)
-                .orElseThrow(() ->
-                        new AssertionError(
-                                "No existe en BD una cuenta con el PAN del test"
-                        )
-                );
-
-        ISOMsg mensaje = new ISOMsg();
-
-        mensaje.setPackager(
-                new IsoMessageFactory().getPackager()
+        ISOMsg isoMsg = isoMessageFactory.crearMensajePago(
+                pan,
+                IsoConstants.PROCESSING_CODE_PURCHASE,
+                montoCentavos,
+                stan,
+                terminal,
+                merchant
         );
 
-        mensaje.setMTI(
-                IsoConstants.MTI_FINANCIAL_REQUEST
-        );
+        // Act
+        PagoRequest request = isoToPagoMapper.convertir(isoMsg);
 
-        mensaje.set(2, pan);
-        mensaje.set(3, "000000");
-        mensaje.set(4, "000000003000");
-        mensaje.set(7, "1005025150");
-        mensaje.set(11, "123456");
-        mensaje.set(12, "025150");
-        mensaje.set(13, "1005");
-        mensaje.set(37, "123456      ");
-        mensaje.set(41, "ATM00001");
-        mensaje.set(42, "COMERCIO000001");
-        mensaje.set(49, "320");
-
-        PagoRequest request =
-                isoToPagoMapper.convertir(mensaje);
-
+        // Assert
         assertNotNull(request);
+        assertEquals(pan, request.pan());
+        assertEquals(new BigDecimal("30.00"), request.monto());
+        assertEquals(stan, request.stan());
+    }
 
-        assertEquals(
-                cuenta.getId(),
-                request.getCuentaId()
+    @Test
+    void deberiaLanzarExcepcionCuandoMensajeEsNull() {
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> isoToPagoMapper.convertir(null)
         );
 
-        assertEquals(
-                new BigDecimal("30.00"),
-                request.getMonto()
-        );
-
-        assertEquals(
-                "123456",
-                request.getStan()
-        );
-
-        System.out.println("========================================");
-        System.out.println("DEMMapear ISO -> REST");
-        System.out.println("========================================");
-        System.out.println("DE2 PAN: " + pan);
-        System.out.println("Cuenta encontrada ID: " + cuenta.getId());
-        System.out.println("DE4 MONTO ISO: 000000003000");
-        System.out.println("MONTO REST: Q" + request.getMonto());
-        System.out.println("DE11 STAN: " + request.getStan());
-        System.out.println("========================================");
-        System.out.println("CONVERSION ISO -> PagoRequest EXITOSA");
+        assertEquals("El mensaje ISO 8583 no puede ser null", exception.getMessage());
     }
 }

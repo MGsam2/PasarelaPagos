@@ -6,42 +6,23 @@ import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 
-public class PagoRequest {
+public record PagoRequest(
+        @NotBlank(message = "El PAN es obligatorio")
+        String pan,
 
-    @NotNull
-    private Long cuentaId;
+        @NotNull(message = "El monto es obligatorio")
+        @DecimalMin(value = "0.01", message = "El monto debe ser mayor a 0")
+        BigDecimal monto,
 
-    @NotNull
-    @DecimalMin(value = "0.01")
-    private BigDecimal monto;
+        @NotBlank(message = "El STAN es obligatorio")
+        String stan,
 
-    @NotBlank
-    private String stan;
+        String rrn,
 
-    public PagoRequest() {
-    }
-
-    public Long getCuentaId() {
-        return cuentaId;
-    }
-
-    public void setCuentaId(Long cuentaId) {
-        this.cuentaId = cuentaId;
-    }
-
-    public BigDecimal getMonto() {
-        return monto;
-    }
-
-    public void setMonto(BigDecimal monto) {
-        this.monto = monto;
-    }
-
-    public String getStan() {
-        return stan;
-    }
-
-    public void setStan(String stan) {
-        this.stan = stan;
+        String cuentaOrigen
+) {
+    // Constructor compacto adicional para compatibilidad con firmas previas
+    public PagoRequest(String pan, BigDecimal monto, String stan) {
+        this(pan, monto, stan, null, null);
     }
 }
