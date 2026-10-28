@@ -3,26 +3,28 @@ package com.pasarelapagos.entity;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 
-@Entity
+@Entity//mapea la clase java directo con la tabla en psql 
 @Table(name = "cuentas")
 public class Cuenta {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)//PK autoincrement
     private Long id;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+//fetchtypelazy evita traer los datos del cliente a la BD hasta que explicitamente  se llame a cuenta.getcliente. optimiza memory y reduce consultas sql
+    @ManyToOne(fetch = FetchType.LAZY, optional = false) //muchas cuentas a un cliente
     @JoinColumn(name = "cliente_id", nullable = false)
     private Cliente cliente;
 
     @Column(name = "numero_cuenta", nullable = false, unique = true, length = 20)
     private String numeroCuenta;
 
+        //contiene los 16 a 19 digitos de la tarjeta, unique garantiza por restriccion en BD no exista 2 tarjeatas duplicadas
     @Column(nullable = false, unique = true, length = 19)
     private String pan;
 
-    @Column(nullable = false, precision = 15, scale = 2)
-    private BigDecimal saldo;
+//aplicara loscampos de tipo bigdecimal dice a jpa que cree columa tipo numeric(12, 5) soporta 13 int y 2 decimal, para no perder centavos
+    @Column(nullable = false, precision = 15, scale = 2) 
+    private BigDecimal saldo;// dinero disponible de la cuenta en el core bancario
 
     @Column(nullable = false, length = 20)
     private String estado;

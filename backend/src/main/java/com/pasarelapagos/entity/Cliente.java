@@ -7,14 +7,14 @@ import jakarta.persistence.*;
 public class Cliente {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)//pk autoincrement
     private Long id;
 
     @Column(nullable = false, length = 100)
     private String nombre;
 
     @Column(nullable = false, unique = true, length = 20)
-    private String documento;
+    private String documento;//no de identificacion unico, unique evita duplicados en BD
 
     public Cliente() {
     }

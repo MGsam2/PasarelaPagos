@@ -3,15 +3,20 @@ package com.pasarelapagos.host;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-
 import java.math.BigDecimal;
 import java.util.Map;
-
+/*Si el Ruteador entregó la carta a la ventanilla de Banco A, el HostBancoA es el cajero del banco
+HOST EMISOR BANCO B
+procesa las transacciones de las tarjetas que inician con el BIN 5222
+Utiliza mainJbdcTemplate para conectarse directamente a la BD Banco B*/
 @Component
 public class HostBancoB {
 
     private final JdbcTemplate bancoBJdbcTemplate;
-
+     /**
+      @Qualifier("bancoBJdbcTemplate"): Inyecta el pool de conexiones 
+     configurado específicamente para la base de datos de Banco B.
+     */
     public HostBancoB(
             @Qualifier("bancoBJdbcTemplate")
             JdbcTemplate bancoBJdbcTemplate) {
@@ -25,7 +30,7 @@ public class HostBancoB {
     }
 
     /**
-     * Busca una cuenta del Banco B utilizando el PAN.
+     Consulta la cuenta bancaria por PAN en la BD de Banco B
      */
     public Map<String, Object> buscarCuentaPorPan(String pan) {
 
@@ -58,22 +63,22 @@ public class HostBancoB {
                 String.valueOf(cuenta.get("estado"));
 
         if (!"ACTIVA".equalsIgnoreCase(estado)) {
-            return 57;
+            return 57;// Código 57: Cuenta inactiva
         }
 
         if (monto == null ||
                 monto.compareTo(BigDecimal.ZERO) <= 0) {
-            return 13;
+            return 13;// Código 13: Monto inválido
         }
 
         BigDecimal saldo =
                 (BigDecimal) cuenta.get("saldo");
 
         if (saldo.compareTo(monto) < 0) {
-            return 51;
+            return 51;// Código 51: Fondos insuficientes
         }
 
-        return 0;
+        return 0;// Validación exitosa
     }
 
     /**
@@ -129,8 +134,9 @@ public class HostBancoB {
         );
     }
 
-    /**
-     * Ejecuta el flujo completo de pago para Banco B.
+     /**
+     MOTOR PRINCIPAL DE PROCESAMIENTO BANCO B:
+     Ejecuta el pipeline completo de autorización y auditoría.
      */
     public int procesarPago(
             String pan,
@@ -139,7 +145,7 @@ public class HostBancoB {
 
         Map<String, Object> cuenta;
 
-        // Validar existencia de la cuenta
+        // 1. Validar existencia de cuenta (Error = Código 14)
         try {
 
             cuenta = buscarCuentaPorPan(pan);
@@ -156,7 +162,7 @@ public class HostBancoB {
             return 14;
         }
 
-        // Validar monto
+        // 2. Validar monto (Error = Código 13)
         if (monto == null ||
                 monto.compareTo(BigDecimal.ZERO) <= 0) {
 
@@ -170,7 +176,7 @@ public class HostBancoB {
             return 13;
         }
 
-        // Validar estado de la cuenta
+        // 3. Validar estado de la cuenta (Error = Código 57)
         String estado =
                 String.valueOf(cuenta.get("estado"));
 
@@ -186,7 +192,7 @@ public class HostBancoB {
             return 57;
         }
 
-        // Validar saldo
+        //4.Validar saldo disponible (Error: Codigo 51)
         BigDecimal saldo =
                 (BigDecimal) cuenta.get("saldo");
 
@@ -202,7 +208,7 @@ public class HostBancoB {
             return 51;
         }
 
-        // Pago aprobado
+        //5. Aprobacion y debito exitoso (Codigo 00 / 0)
         registrarTransaccion(
                 pan,
                 monto,
@@ -252,3 +258,6 @@ public class HostBancoB {
         );
     }
 }
+/*"El HostBancoB implementa la lógica de autorización para las tarjetas procesadas en Banco B (BIN 5222). 
+La diferencia clave con Banco A es técnica: utiliza @Qualifier("bancoBJdbcTemplate") para garantizar el aislamiento de datos, 
+realizando consultas, débitos y registros de auditoría sobre la base de datos independiente banco_b." */

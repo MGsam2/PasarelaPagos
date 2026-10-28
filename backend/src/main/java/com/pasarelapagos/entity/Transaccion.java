@@ -4,15 +4,15 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-@Entity
+@Entity//mapea la clase java directo con la tabla en psql 
 @Table(name = "transacciones")
 public class Transaccion {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)//PK autoincrement
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)//muchas transacciona a una cuenta
     @JoinColumn(name = "cuenta_id", nullable = false)
     private Cuenta cuenta;
 
@@ -25,12 +25,15 @@ public class Transaccion {
     @Column(nullable = false, length = 20)
     private String estado;
 
+    //almacena el resuptado enviado del core bancario 00 aprobado, 51 sin fondos, 14 tarjeta invalida
     @Column(name = "codigo_respuesta", length = 2)
     private String codigoRespuesta;
 
+    //guarda el numeo de auditoria de la solicitud enviada por el terminal tcp/api para quedar reg en el historial pasarela
     @Column(length = 6)
     private String stan;
 
+    //almacena tiempo exacto en que ocurrio el intento de pago para conciliacion bancaria
     @Column(name = "fecha_hora", nullable = false)
     private LocalDateTime fechaHora;
 

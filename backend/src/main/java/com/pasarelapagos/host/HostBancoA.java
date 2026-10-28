@@ -3,16 +3,20 @@ package com.pasarelapagos.host;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-
 import java.math.BigDecimal;
 import java.util.Map;
 
+/*Si el Ruteador entregó la carta a la ventanilla de Banco A, el HostBancoA es el cajero del banco
+HOST EMISOR BANCO A
+procesa las transacciones de las tarjetas que inician con el BIN 4111
+Utiliza mainJbdcTemplate para conectarse directamente a la BD principal*/
 @Service
 public class HostBancoA {
 
     private final JdbcTemplate jdbcTemplate;
 
     public HostBancoA(
+            //indica a spring que use el pool de conexiones hacia la base de datos de Banco A
             @Qualifier("mainJdbcTemplate")
             JdbcTemplate jdbcTemplate) {
 
@@ -23,7 +27,9 @@ public class HostBancoA {
         System.out.println("JdbcTemplate: MAIN");
         System.out.println("========================================");
     }
-
+     /**
+      BUSCAR CUENTA: Ejecuta consulta SQL obteniendo saldo y estado por PAN.
+     */
     public Map<String, Object> buscarCuentaPorPan(String pan) {
 
         String sql = """
@@ -38,14 +44,15 @@ public class HostBancoA {
 
         return jdbcTemplate.queryForMap(sql, pan);
     }
-
+/*MOTOR DE AUTORIZACION BANCARIA
+Aplica las reglas de neegocio en orden y devuelve el codigo ISO correspondiente */
     public int procesarPago(
             String pan,
             BigDecimal monto,
             String stan) {
 
         Map<String, Object> cuenta;
-
+//1.Verificar existencia de la tarjeta 
         try {
 
             cuenta = buscarCuentaPorPan(pan);
@@ -58,11 +65,11 @@ public class HostBancoA {
             System.err.println("MENSAJE: " + e.getMessage());
             e.printStackTrace();
             System.err.println("========================================");
-
+                //Si la consulta SQL no devuleve nada, retorna  codigo 14 - Tarjeta invalida
             return 14;
         }
 
-        // Código 13 - monto inválido
+        // 2. Verifica que el monto sea mayor a 0
         if (monto == null ||
                 monto.compareTo(BigDecimal.ZERO) <= 0) {
 
@@ -73,10 +80,10 @@ public class HostBancoA {
                     "13"
             );
 
-            return 13;
+            return 13;//Código 13 - monto inválido
         }
 
-        // Código 57 - cuenta inactiva
+        //3.Verifica estado de la cuenta 
         String estado =
                 String.valueOf(cuenta.get("estado"));
 
@@ -89,10 +96,10 @@ public class HostBancoA {
                     "57"
             );
 
-            return 57;
+            return 57;//Código 57 - cuenta inactiva
         }
 
-        // Código 51 - fondos insuficientes
+        //4.Verifica disponibilidad de saldo  
         BigDecimal saldo =
                 (BigDecimal) cuenta.get("saldo");
 
@@ -105,10 +112,10 @@ public class HostBancoA {
                     "51"
             );
 
-            return 51;
+            return 51; //Código 51 - fondos insuficientes
         }
 
-        // Código 00 - pago aprobado
+        //5.Aprobacion, aplica el debito y registra la transaccion 
         registrarTransaccion(
                 pan,
                 monto,
@@ -117,9 +124,10 @@ public class HostBancoA {
                 "APROBADA"
         );
 
-        return 0;
+        return 0;//Código 0 / 00 - pago aprobado
     }
-
+    /*DEBITO CONTABLE Y REGISTRO EXITOSO
+     resta el dinero del saldo de la cuenta e inserta la auditoria en transacciones */
     private void registrarTransaccion(
             String pan,
             BigDecimal monto,
@@ -132,7 +140,7 @@ public class HostBancoA {
 
         Long cuentaId =
                 ((Number) cuenta.get("id")).longValue();
-
+        //actualiza el saldo en la tabla de cuentas de Banco A
         String updateSaldo = """
                 UPDATE cuentas
                 SET saldo = saldo - ?
@@ -144,7 +152,7 @@ public class HostBancoA {
                 monto,
                 cuentaId
         );
-
+        //inserta el comprobante en la tabla de transacciones de Banco A
         String insertTransaccion = """
                 INSERT INTO transacciones
                     (cuenta_id,
@@ -168,7 +176,8 @@ public class HostBancoA {
                 stan
         );
     }
-
+    /*AUDITORIA DE RECHAZOS
+    guarda en la BD las transacciones rechazadas para trazabilidad */
     private void registrarTransaccionRechazada(
             Map<String, Object> cuenta,
             BigDecimal monto,

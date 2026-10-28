@@ -1,7 +1,6 @@
 package com.pasarelapagos.dto;
 
 import com.pasarelapagos.entity.Cuenta;
-
 import java.math.BigDecimal;
 
 public record CuentaResponse(
@@ -12,6 +11,7 @@ public record CuentaResponse(
         BigDecimal saldo,
         String estado
 ) {
+    //constr de entidad jpa cuenta extrae solo atributos que interesan al cliente
     public CuentaResponse(Cuenta cuenta) {
         this(
                 cuenta.getPan(),

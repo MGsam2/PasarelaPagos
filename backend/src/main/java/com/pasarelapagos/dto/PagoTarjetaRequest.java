@@ -6,7 +6,9 @@ import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 
-public record PagoTarjetaRequest(
+public record PagoTarjetaRequest(//dto entrada web/front
+        //cuando este dto llega al controlador restm lo convierte en un pagorequest para pasarselo al ruteador
+        //recibe pagos desde intergaz react / http externa simplificada
         @NotBlank(message = "El PAN es obligatorio")
         String pan,
 
