@@ -5,26 +5,36 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
-//record clase immutable solo para transportar datos, genera automaticamente equals, hashcode y tostring
+
+/**
+ * DTO inmutable (Java Record) para transporte transaccional de pagos.
+ * Representa los Data Elements normalizados extraídos de la trama ISO 8583 (MTI 0200).
+ */
 public record PagoRequest(
         @NotBlank(message = "El PAN es obligatorio")
-        String pan,//primary account number, no de tarjeta
-// los primeros 6,8 digitos corresponden a bin, utiliza el ruteador para saber que banco enviar la transaccion
+        String pan, // DE 2 - Primary Account Number (Tarjeta)
+
         @NotNull(message = "El monto es obligatorio")
         @DecimalMin(value = "0.01", message = "El monto debe ser mayor a 0")
-        BigDecimal monto,//valor a procesar
+        BigDecimal monto, // DE 4 - Monto en formato monetario normalizado
 
         @NotBlank(message = "El STAN es obligatorio")
-        String stan,//umero de secuencia unico generado por la terminal o cliente por c/transaccion
+        String stan, // DE 11 - System Trace Audit Number (Auditoría)
 
-        String rrn, //identificador global unico de 12 digitos asigna pasarela para rastrear la transaccion a lo largo de todo el ecosistema
+        String rrn, // DE 37 - Retrieval Reference Number (12 caracteres)
 
-        String cuentaOrigen
+        String cuentaOrigen, // DE 102 - Cuenta de cargo del tarjetahabiente
+
+        String processingCode // DE 3 - Processing Code (6 dígitos, ej. 000000 para compra)
 ) {
-    // Constructor compacto adicional para compatibilidad con firmas previas
-    //permite crear pagorequest pasando solo pan, monto y stan asignando null a rrn y cuenta origen, ayuda 
-    //mantener compatibilidad cuando la llamada viene desde el servidor tcp iso 8583
+
+    // Constructor para llamadas directas simplificadas
     public PagoRequest(String pan, BigDecimal monto, String stan) {
-        this(pan, monto, stan, null, null);
+        this(pan, monto, stan, null, null, "000000");
+    }
+
+    // Constructor previo para compatibilidad hacia atrás
+    public PagoRequest(String pan, BigDecimal monto, String stan, String rrn, String cuentaOrigen) {
+        this(pan, monto, stan, rrn, cuentaOrigen, "000000");
     }
 }

@@ -74,6 +74,9 @@
         <!-- DE70 - Network Management -->
         <field num="70" type="NUMERIC" length="3"/>
 
+        <!-- DE102 - Account Identification 1 -->
+        <field num="102" type="LLVAR"/>
+
     </parse>
 
 
@@ -106,6 +109,9 @@
 
         <!-- DE70 - Network Management -->
         <field num="70" type="NUMERIC" length="3"/>
+
+        <!-- DE102 - Account Identification 1 -->
+        <field num="102" type="LLVAR"/>
 
     </parse>
 

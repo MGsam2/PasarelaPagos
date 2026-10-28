@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: pasarela-pagos
+  threads:
+    virtual:
+      enabled: true
+  main:
+    keep-alive: true
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+# Puerto del Servidor TCP de Ingesta ISO 8583
+tcp:
+  server:
+    port: 9090
+
+# Integración con Core Bancario (Soporta modo "direct" de ultra alta velocidad o "http" vía RestClient)
+corebancario:
+  url: "http://localhost:8080"
+  adapter:
+    mode: "direct"
+

@@ -6,18 +6,18 @@ import org.jpos.iso.packager.GenericPackager;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
-/*CREA MENSAJES Y PLANTILLAD SEL ISO 8583
-carga reglas estructurales de la trama bancaria en un XML Pasarela-packager.xml
-Si el IsoParser abre y los mappers llenan los formularios, 
-IsoMessageFactory es la imprenta y la fábrica de moldes:*/
+
+/**
+ * Fábrica de mensajes ISO 8583.
+ * Carga las especificaciones estructurales de la trama bancaria desde pasarela-packager.xml.
+ * Inicializa el packager y construye tramas financieras (MTI 0200) completas.
+ */
 @Component
 public class IsoMessageFactory {
 
     private final ISOPackager packager;
-        /*CONSTRUCTOR ejecuta al alevantar springboot
-        lee el archivo XML que contiene las especificaciones de cada DE */
-    public IsoMessageFactory() throws Exception {
 
+    public IsoMessageFactory() throws Exception {
         InputStream inputStream = getClass()
                 .getClassLoader()
                 .getResourceAsStream("iso8583/pasarela-packager.xml");
@@ -27,12 +27,12 @@ public class IsoMessageFactory {
                     "No se encontró iso8583/pasarela-packager.xml en el classpath"
             );
         }
-        //interpreta las reglas descritas en el XML
         this.packager = new GenericPackager(inputStream);
     }
-/* CREA SOLICITUDES 
-construye un objeto isomsg 0200 asignado automaticamente 
-los sellos de tiempo DE 7, DE 12, DE 13 y la moneda de GT DE 49*/
+
+    /**
+     * Construye un objeto ISOMsg 0200 asignando sellos temporales (DE 7, 12, 13) y moneda (DE 49).
+     */
     public ISOMsg crearMensajePago(
             String pan,
             String processingCode,
@@ -42,81 +42,79 @@ los sellos de tiempo DE 7, DE 12, DE 13 y la moneda de GT DE 49*/
             String merchantId) throws Exception {
 
         ISOMsg mensaje = new ISOMsg();
-                // le asignamos el packager/plantilla XML
         mensaje.setPackager(packager);
 
-        // MTI 0200 solicitud compra/ autorizacion
+        // MTI 0200 - Solicitud de autorización de compra
         mensaje.setMTI(IsoConstants.MTI_FINANCIAL_REQUEST);
 
-        // DE2 - tarjeta PAN
+        // DE 2 - Tarjeta (PAN)
         mensaje.set(2, pan);
 
-        // DE3 - Processing Code 000000
+        // DE 3 - Processing Code (000000 compra estándar)
         mensaje.set(3, processingCode);
 
-        // DE4 - Amount monto en centavos
+        // DE 4 - Monto en centavos (12 dígitos numéricos)
         mensaje.set(4, monto);
 
-        // DE7 - Transmission Date/Time fecha y hora de transmision MMddHHmmss
+        // DE 7 - Fecha y hora de transmisión (MMddHHmmss)
         mensaje.set(7, obtenerFechaTransmision());
 
-        // DE11 - STAN, numero de auditoria
+        // DE 11 - STAN (Auditoría de 6 dígitos)
         mensaje.set(11, stan);
 
-        // DE12 - Local Time HOra local
+        // DE 12 - Hora local (HHmmss)
         mensaje.set(12, obtenerHoraLocal());
 
-        // DE13 - Local Date Fecha local
+        // DE 13 - Fecha local (MMdd)
         mensaje.set(13, obtenerFechaLocal());
 
-        // DE37 - Retrieval Reference RRN asignado a 12 caracteres
+        // DE 37 - RRN (12 caracteres normalizados)
         mensaje.set(37, generarReferencia(stan));
 
-        // DE41 - Terminal  POS
+        // DE 41 - Terminal POS
         mensaje.set(41, terminalId);
 
-        // DE42 - Merchant ID, ID del comercio
+        // DE 42 - Identificador del Comercio
         mensaje.set(42, merchantId);
 
-        // DE49 - Currency Code, MOneda 320 = Quetzales
+        // DE 49 - Código de Moneda ISO 4217 (320 = Quetzales GTQ)
         mensaje.set(49, IsoConstants.CURRENCY_GUATEMALA);
 
         return mensaje;
     }
-    //METODO DE FECHA Y HORA AUTOMATICOS
+
     private String obtenerFechaTransmision() {
         return java.time.LocalDateTime.now()
-                .format(
-                        java.time.format.DateTimeFormatter
-                                .ofPattern("MMddHHmmss")
-                );
+                .format(java.time.format.DateTimeFormatter.ofPattern("MMddHHmmss"));
     }
 
     private String obtenerHoraLocal() {
         return java.time.LocalTime.now()
-                .format(
-                        java.time.format.DateTimeFormatter
-                                .ofPattern("HHmmss")
-                );
+                .format(java.time.format.DateTimeFormatter.ofPattern("HHmmss"));
     }
 
     private String obtenerFechaLocal() {
         return java.time.LocalDate.now()
-                .format(
-                        java.time.format.DateTimeFormatter
-                                .ofPattern("MMdd")
-                );
+                .format(java.time.format.DateTimeFormatter.ofPattern("MMdd"));
     }
 
     private String generarReferencia(String stan) {
-        return String.format("%-12s", stan)
-                .substring(0, 12);
+        if (stan == null || stan.isBlank()) {
+            return "000000000000";
+        }
+        String clean = stan.trim();
+        if (clean.length() >= 12) {
+            return clean.substring(0, 12);
+        }
+        try {
+            long stanNum = Long.parseLong(clean);
+            return String.format("%012d", stanNum);
+        } catch (NumberFormatException e) {
+            return String.format("%12s", clean).replace(' ', '0');
+        }
     }
-//Devuelve el packager configurado para ser usado por el IsoParser O Mappers
+
     public ISOPackager getPackager() {
         return packager;
     }
 }
-//"El IsoMessageFactory es el componente responsable de inicializar el GenericPackager de jPOS leyendo el mapa de la trama desde pasarela-packager.xml. 
-// Además, nos proporciona métodos utilitarios para construir mensajes ISO 0200 válidos asignando automáticamente los campos temporales (DE 7, 12 y 13) 
-// y la moneda nacional (DE 49)."

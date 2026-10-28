@@ -5,14 +5,22 @@ import com.pasarelapagos.dto.PagoRequest;
 import com.pasarelapagos.ruteador.Ruteador;
 import com.pasarelapagos.ruteador.RuteadorPagoResponse;
 import com.pasarelapagos.service.IdempotenciaService;
+import com.pasarelapagos.util.MaskingUtils;
 import org.jpos.iso.ISOMsg;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-/*SERVICIO PIPELINE TCP ORQUESTADOR
-coordina el flujo completo desde que entrada la rafaga de bytes por el socket TCP
-hasta que se devuelva el mensaje de autorizado iso 0210 */
+/**
+ * Orquestador principal del pipeline transaccional ISO 8583.
+ * Coordina el ciclo de vida completo: desempaque, verificación de idempotencia,
+ * enrutamiento o consumo HTTP mediante RestClient y empaque de respuesta MTI 0210.
+ */
 @Service
 public class IsoTransactionService {
+
+    private static final Logger log = LoggerFactory.getLogger(IsoTransactionService.class);
 
     private final IsoParser isoParser;
     private final IsoToPagoMapper isoToPagoMapper;
@@ -20,6 +28,9 @@ public class IsoTransactionService {
     private final IsoResponseMapper isoResponseMapper;
     private final IdempotenciaService idempotenciaService;
     private final CoreBancarioClient coreBancarioClient;
+
+    @Value("${corebancario.adapter.mode:direct}")
+    private String coreBancarioAdapterMode;
 
     public IsoTransactionService(
             IsoParser isoParser,
@@ -37,76 +48,82 @@ public class IsoTransactionService {
         this.coreBancarioClient = coreBancarioClient;
     }
 
-    /*Pipeline de procesamiento tcp
-    recibe bytes de la red tcp puerto 9090 y retorna bytes formateados en iso 8583 */
+    /**
+     * Pipeline transaccional TCP no bloqueante asistido por Virtual Threads.
+     * Recibe los bytes crudos del socket y retorna la trama empaquetada ISO 0210.
+     */
     public byte[] procesar(byte[] mensajeIso) throws Exception {
-
-        //1. desempaquetar- convierte los bytes de red en un objeto ISOMsg
-        ISOMsg solicitud = isoParser.unpack(mensajeIso);
+        ISOMsg solicitud;
+        try {
+            // 1. Desempaquetar: convierte los bytes de red en un objeto ISOMsg
+            solicitud = isoParser.unpack(mensajeIso);
+        } catch (Exception e) {
+            log.error("Error al desempaquetar trama ISO 8583: {}", e.getMessage());
+            throw e;
+        }
 
         try {
-            //2. MAPEAR: extrae el dto de negocio (PagoRequest) desde los campos ISO (DE 2, DE 4, DE 11)
+            // 2. Mapear: extrae DTO inmutable con validación de Data Elements (DE 2, 3, 4, 11, 37, 102)
             PagoRequest pagoRequest = isoToPagoMapper.convertir(solicitud);
 
-            //3.Generar clave de idempotencia usando RRN o combinación PAN + STAN - huella unica
+            // 3. Generar clave de idempotencia única (RRN o PAN + STAN)
             String claveIdempotencia = (pagoRequest.rrn() != null && !pagoRequest.rrn().isBlank())
                     ? pagoRequest.rrn()
                     : pagoRequest.pan() + "_" + pagoRequest.stan();
 
             int codigoRespuesta;
 
-            //4. Verificación de Idempotencia: evita cobros dobles si la terminal reenvia la peticion
+            // 4. Verificación de Idempotencia: evita cobros duplicados en reintentos de red
             if (idempotenciaService.esTransaccionDuplicada(claveIdempotencia)) {
-                //recupera la respuesta previa de memoria sin tocar la BD
+                log.info("Transacción duplicada detectada para clave {}. Retornando respuesta en caché.", claveIdempotencia);
                 codigoRespuesta = idempotenciaService.obtenerRespuestaPrevia(claveIdempotencia);
             } else {
-                // 5. Procesamiento transaccional, enrutar y debitar, envia al ruteador para  conmutar a Banco A o Banco B
-                codigoRespuesta = ruteador.procesarPago(
-                        pagoRequest.pan(),
-                        pagoRequest.monto(),
-                        pagoRequest.stan()
-                );
+                // 5. Procesamiento transaccional (adaptador HTTP RestClient o directo según configuración)
+                if ("http".equalsIgnoreCase(coreBancarioAdapterMode)) {
+                    log.debug("Enrutando transacción vía RestClient hacia Core Bancario HTTP");
+                    RuteadorPagoResponse respuestaHttp = coreBancarioClient.procesarPagoCore(pagoRequest);
+                    codigoRespuesta = respuestaHttp.codigoRespuesta();
+                } else {
+                    codigoRespuesta = ruteador.procesarPago(
+                            pagoRequest.pan(),
+                            pagoRequest.monto(),
+                            pagoRequest.stan()
+                    );
+                }
 
-                //Guarda el resultado en caché de idempotencia
+                // Almacenar en caché de idempotencia
                 idempotenciaService.registrarTransaccion(claveIdempotencia, codigoRespuesta);
             }
-            //formatea el codigo de respuesta numerico a 2 digitos texto ( 0 -> 00)
+
+            // 6. Formatear código de respuesta a 2 caracteres estándar
             String codigoIso = String.format("%02d", codigoRespuesta);
-            //6. Mapear salida: construye el objeto ISOMsg de respuesta (MTI 0210)
-            ISOMsg respuesta = isoResponseMapper.crearRespuestaDesdeCodigo(
-                    solicitud,
-                    codigoIso
-            );
-            //7. Empaquetar: convierte la respuesta 0210 a bytes para enviar por TCP
+
+            // 7. Mapear salida: construye ISOMsg 0210 con mirroring exacto
+            ISOMsg respuesta = isoResponseMapper.crearRespuestaDesdeCodigo(solicitud, codigoIso);
+
+            log.debug("Transacción completada para PAN {} con código DE 39: {}",
+                    MaskingUtils.maskPan(pagoRequest.pan()), codigoIso);
+
+            // 8. Empaquetar a bytes para responder por el socket TCP
+            return isoParser.pack(respuesta);
+
+        } catch (IllegalArgumentException ex) {
+            log.warn("Solicitud ISO inválida: {}", ex.getMessage());
+            String codigoError = (ex.getMessage() != null && ex.getMessage().contains("PAN"))
+                    ? IsoConstants.RESPONSE_INVALID_ACCOUNT
+                    : IsoConstants.RESPONSE_FORMAT_ERROR;
+
+            ISOMsg respuesta = isoResponseMapper.crearRespuestaError(solicitud, codigoError);
             return isoParser.pack(respuesta);
 
         } catch (Exception exception) {
-            //Manejo de excepciones Devuelve respuesta ISO de error (Codigo 14) en formato de bytes
+            log.error("Fallo inesperado del sistema al procesar trama ISO: {}", exception.getMessage(), exception);
+            // Estándar ISO 8583: Fallos internos del sistema responden con código 96 (System Error)
             ISOMsg respuesta = isoResponseMapper.crearRespuestaError(
                     solicitud,
-                    IsoConstants.RESPONSE_INVALID_ACCOUNT
+                    IsoConstants.RESPONSE_SYSTEM_ERROR
             );
-
             return isoParser.pack(respuesta);
         }
     }
 }
-/*"El IsoTransactionService es el orquestador principal del Socket TCP. Recibe la trama en bytes del puerto 9090, 
-la desempaca con IsoParser, verifica idempotencia con IdempotenciaService para evitar cobros dobles, 
-conmuta la transacción al banco correspondiente con Ruteador y devuelve la trama empaquetada de respuesta 0210 en milisegundos." */
-
-/*Recibe la trama en bytes desde el puerto TCP 9090.
-
-Llama al IsoParser para desarmar la trama (unpack).
-
-Llama al IsoToPagoMapper para extraer el objeto PagoRequest.
-
-Verifica si es una transacción duplicada usando IdempotenciaService:
-
-Si es duplicada: Reutiliza el resultado previo sin tocar el banco.
-
-Si es nueva: Delega la transacción al Ruteador 
-para cobrar en Banco A o Banco B y guarda el resultado.
-
-Construye la respuesta ISO 0210 con IsoResponseMapper 
-y la empaca en bytes con IsoParser para enviarla de vuelta por la red. */

@@ -19,6 +19,9 @@ public final class IsoConstants {
     public static final String RESPONSE_INVALID_ACCOUNT = "14";//tarjeta no encontrada o pan innvalido
     public static final String RESPONSE_INSUFFICIENT_FUNDS = "51";//fondos insuficientes
     public static final String RESPONSE_ACCOUNT_NOT_ACTIVE = "57";//cuenta inactiva/bloqueada
+    public static final String RESPONSE_FORMAT_ERROR = "30"; //error en formato de mensaje
+    public static final String RESPONSE_DUPLICATE_TRANSACTION = "94"; //transaccion duplicada detectada
+    public static final String RESPONSE_SYSTEM_ERROR = "96"; //error de sistema / fallo host bancario
 
     // Currency
     public static final String CURRENCY_GUATEMALA = "320"; //iso 4271. no. que identifica moneda guatemala

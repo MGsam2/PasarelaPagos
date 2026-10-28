@@ -47,11 +47,10 @@ public class MainDataSourceConfig {
     }
 
     /*GESTOR DE TRANSACCIONES JPA PRINCIPAL:
-     A diferencia del Banco B (que usaba un gestor JDBC puro), este gestor (JpaTransactionManager)
-     se encarga de las transacciones ACID para las entidades de Hibernate (@Entity).
-     Es el motor seguro detrás del PagoService y el portal administrativo.*/
+     Configura el gestor primario para transacciones ACID sobre la base de datos central.
+     Soporta tanto operaciones de Hibernate/JPA como operaciones de JDBC sobre mainDataSource.*/
     @Primary
-    @Bean(name = "transactionManager")
+    @Bean(name = {"transactionManager", "mainTransactionManager"})
     public PlatformTransactionManager transactionManager(
             EntityManagerFactory entityManagerFactory) {
 
@@ -60,7 +59,3 @@ public class MainDataSourceConfig {
         );
     }
 }
-/*"El MainDataSourceConfig define la conexión troncal de la pasarela. Utiliza la anotación @Primary 
-para resolver la ambigüedad en el ecosistema Multi-DataSource. Demuestra una arquitectura híbrida avanzada: 
-expone un JdbcTemplate para operaciones DML ultrarrápidas de SQL nativo, y al mismo tiempo configura un 
-JpaTransactionManager para administrar de forma segura las entidades del back-office con Hibernate."*/

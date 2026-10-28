@@ -1,7 +1,7 @@
 # ==========================================
 # ETAPA 1: Compilación AOT con GraalVM Native Image
 # ==========================================
-FROM ghcr.io/graalvm/native-image-community:21 AS builder
+FROM ghcr.io/graalvm/native-image-community:25 AS builder
 
 WORKDIR /app
 

@@ -6,7 +6,7 @@ function App() {
   const [mensaje, setMensaje] = useState(null) // Objeto para manejar texto y tipo (éxito/error)
   const [procesando, setProcesando] = useState(false)
 
-  const precio = 49.99
+  const precio = 50.00
   const total = precio * cantidad
 
   const formatearTarjeta = (valor) => {

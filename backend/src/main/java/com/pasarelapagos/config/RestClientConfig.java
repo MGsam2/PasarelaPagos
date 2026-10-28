@@ -1,25 +1,30 @@
 package com.pasarelapagos.config;
 
+import jakarta.annotation.PostConstruct;
+import jakarta.inject.Named;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
 
-/*CONFIGURACIÓN DEL CLIENTE HTTP (REST CLIENT):
- Centraliza la creación del motor de peticiones HTTP salientes introducido en Spring 3.2+
- para comunicarse con sistemas externos (como los cores bancarios).*/
+/**
+ * Configuración del cliente HTTP RestClient (Spring Framework 7 / Spring Boot 4.1).
+ * Emplea estándares de inyección y ciclo de vida de Jakarta EE 11 (jakarta.annotation.* y jakarta.inject.*).
+ */
 @Configuration
 public class RestClientConfig {
 
-    /*CONSTRUCTOR DE CLIENTE REST GLOBAL:
-     Expone un RestClient.Builder administrado por Spring.
-     Permite que cualquier componente de la pasarela instancie clientes HTTP 
-     heredando automáticamente las configuraciones globales (métricas, trazabilidad).*/
+    private static final Logger log = LoggerFactory.getLogger(RestClientConfig.class);
+
+    @PostConstruct
+    public void init() {
+        log.info("Inicializando configuración de RestClient con especificación Jakarta EE 11");
+    }
+
     @Bean
+    @Named("globalRestClientBuilder")
     public RestClient.Builder restClientBuilder() {
         return RestClient.builder();
     }
 }
-/*"El RestClientConfig provee un RestClient.Builder gestionado por el contenedor de Inversión de Control (IoC). 
-Esta decisión arquitectónica reemplaza al antiguo RestTemplate, ofreciendo una API fluida y optimizada. 
-Al inyectar el Builder (y no el cliente estático), aseguramos que todas las peticiones HTTP salientes 
-puedan integrarse automáticamente con el ecosistema de observabilidad y seguridad de Spring Boot."*/

@@ -1,37 +1,37 @@
 package com.pasarelapagos.host;
 
+import com.pasarelapagos.iso8583.IsoConstants;
+import com.pasarelapagos.util.MaskingUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
 import java.util.Map;
 
-/*Si el Ruteador entregó la carta a la ventanilla de Banco A, el HostBancoA es el cajero del banco
-HOST EMISOR BANCO A
-procesa las transacciones de las tarjetas que inician con el BIN 4111
-Utiliza mainJbdcTemplate para conectarse directamente a la BD principal*/
+/**
+ * Host emisor del Banco A (BIN 4111).
+ * Aplica lógica de autorización bancaria, débito atómico y auditoría contable.
+ * Protegido contra condiciones de carrera (Race Conditions) y con logs PCI-DSS seguros.
+ */
 @Service
 public class HostBancoA {
 
+    private static final Logger log = LoggerFactory.getLogger(HostBancoA.class);
+
     private final JdbcTemplate jdbcTemplate;
 
-    public HostBancoA(
-            //indica a spring que use el pool de conexiones hacia la base de datos de Banco A
-            @Qualifier("mainJdbcTemplate")
-            JdbcTemplate jdbcTemplate) {
-
+    public HostBancoA(@Qualifier("mainJdbcTemplate") JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-
-        System.out.println("========================================");
-        System.out.println("HOST BANCO A INICIALIZADO");
-        System.out.println("JdbcTemplate: MAIN");
-        System.out.println("========================================");
     }
-     /**
-      BUSCAR CUENTA: Ejecuta consulta SQL obteniendo saldo y estado por PAN.
+
+    /**
+     * Consulta la cuenta y saldo por PAN.
      */
     public Map<String, Object> buscarCuentaPorPan(String pan) {
-
         String sql = """
                 SELECT id,
                        numero_cuenta,
@@ -41,175 +41,84 @@ public class HostBancoA {
                 FROM cuentas
                 WHERE pan = ?
                 """;
-
         return jdbcTemplate.queryForMap(sql, pan);
     }
-/*MOTOR DE AUTORIZACION BANCARIA
-Aplica las reglas de neegocio en orden y devuelve el codigo ISO correspondiente */
-    public int procesarPago(
-            String pan,
-            BigDecimal monto,
-            String stan) {
 
+    /**
+     * Motor de autorización bancaria y débito atómico transaccional.
+     * Utiliza el gestor de transacciones primario (mainDataSource / pasarela_pagos).
+     */
+    @Transactional
+    public int procesarPago(String pan, BigDecimal monto, String stan) {
         Map<String, Object> cuenta;
-//1.Verificar existencia de la tarjeta 
+
+        // 1. Verificar existencia de la cuenta
         try {
-
             cuenta = buscarCuentaPorPan(pan);
-
         } catch (Exception e) {
-
-            System.err.println("========================================");
-            System.err.println("ERROR EN HOST BANCO A");
-            System.err.println("PAN: " + pan);
-            System.err.println("MENSAJE: " + e.getMessage());
-            e.printStackTrace();
-            System.err.println("========================================");
-                //Si la consulta SQL no devuleve nada, retorna  codigo 14 - Tarjeta invalida
-            return 14;
+            log.warn("Host Banco A: Cuenta no encontrada para PAN {}", MaskingUtils.maskPan(pan));
+            return 14; // Código 14: Tarjeta no encontrada / PAN inválido
         }
 
-        // 2. Verifica que el monto sea mayor a 0
-        if (monto == null ||
-                monto.compareTo(BigDecimal.ZERO) <= 0) {
+        Long cuentaId = ((Number) cuenta.get("id")).longValue();
 
-            registrarTransaccionRechazada(
-                    cuenta,
-                    monto,
-                    stan,
-                    "13"
-            );
-
-            return 13;//Código 13 - monto inválido
+        // 2. Verificar monto válido (> 0)
+        if (monto == null || monto.compareTo(BigDecimal.ZERO) <= 0) {
+            registrarTransaccionRechazada(cuentaId, monto, stan, IsoConstants.RESPONSE_INVALID_AMOUNT);
+            return 13; // Código 13: Monto inválido
         }
 
-        //3.Verifica estado de la cuenta 
-        String estado =
-                String.valueOf(cuenta.get("estado"));
-
+        // 3. Verificar estado de la cuenta
+        String estado = String.valueOf(cuenta.get("estado"));
         if (!"ACTIVA".equalsIgnoreCase(estado)) {
-
-            registrarTransaccionRechazada(
-                    cuenta,
-                    monto,
-                    stan,
-                    "57"
-            );
-
-            return 57;//Código 57 - cuenta inactiva
+            registrarTransaccionRechazada(cuentaId, monto, stan, IsoConstants.RESPONSE_ACCOUNT_NOT_ACTIVE);
+            return 57; // Código 57: Cuenta inactiva o bloqueada
         }
 
-        //4.Verifica disponibilidad de saldo  
-        BigDecimal saldo =
-                (BigDecimal) cuenta.get("saldo");
-
+        // 4. Verificar disponibilidad previa de saldo
+        BigDecimal saldo = (BigDecimal) cuenta.get("saldo");
         if (saldo.compareTo(monto) < 0) {
-
-            registrarTransaccionRechazada(
-                    cuenta,
-                    monto,
-                    stan,
-                    "51"
-            );
-
-            return 51; //Código 51 - fondos insuficientes
+            registrarTransaccionRechazada(cuentaId, monto, stan, IsoConstants.RESPONSE_INSUFFICIENT_FUNDS);
+            return 51; // Código 51: Fondos insuficientes
         }
 
-        //5.Aprobacion, aplica el debito y registra la transaccion 
-        registrarTransaccion(
-                pan,
-                monto,
-                stan,
-                "00",
-                "APROBADA"
-        );
-
-        return 0;//Código 0 / 00 - pago aprobado
-    }
-    /*DEBITO CONTABLE Y REGISTRO EXITOSO
-     resta el dinero del saldo de la cuenta e inserta la auditoria en transacciones */
-    private void registrarTransaccion(
-            String pan,
-            BigDecimal monto,
-            String stan,
-            String codigoRespuesta,
-            String estadoTransaccion) {
-
-        Map<String, Object> cuenta =
-                buscarCuentaPorPan(pan);
-
-        Long cuentaId =
-                ((Number) cuenta.get("id")).longValue();
-        //actualiza el saldo en la tabla de cuentas de Banco A
-        String updateSaldo = """
+        // 5. Débito atómico con salvaguarda en BD (previene sobregiro en concurrencia masiva)
+        String sqlUpdateSaldo = """
                 UPDATE cuentas
                 SET saldo = saldo - ?
-                WHERE id = ?
+                WHERE id = ? AND saldo >= ?
                 """;
 
-        jdbcTemplate.update(
-                updateSaldo,
-                monto,
-                cuentaId
-        );
-        //inserta el comprobante en la tabla de transacciones de Banco A
+        int filasActualizadas = jdbcTemplate.update(sqlUpdateSaldo, monto, cuentaId, monto);
+        if (filasActualizadas == 0) {
+            // El saldo varió concurrentemente y ya no es suficiente
+            registrarTransaccionRechazada(cuentaId, monto, stan, IsoConstants.RESPONSE_INSUFFICIENT_FUNDS);
+            return 51;
+        }
+
+        // 6. Registro contable del comprobante aprobado
+        registrarTransaccionAprobada(cuentaId, monto, stan);
+        log.debug("Host Banco A: Pago aprobado exitosamente para PAN {}", MaskingUtils.maskPan(pan));
+        return 0; // Código 00: Pago aprobado
+    }
+
+    private void registrarTransaccionAprobada(Long cuentaId, BigDecimal monto, String stan) {
         String insertTransaccion = """
                 INSERT INTO transacciones
-                    (cuenta_id,
-                     monto,
-                     tipo,
-                     estado,
-                     codigo_respuesta,
-                     stan,
-                     fecha_hora)
+                    (cuenta_id, monto, tipo, estado, codigo_respuesta, stan, fecha_hora)
                 VALUES
-                    (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    (?, ?, 'PAGO', 'APROBADA', '00', ?, CURRENT_TIMESTAMP)
                 """;
-
-        jdbcTemplate.update(
-                insertTransaccion,
-                cuentaId,
-                monto,
-                "PAGO",
-                estadoTransaccion,
-                codigoRespuesta,
-                stan
-        );
+        jdbcTemplate.update(insertTransaccion, cuentaId, monto, stan);
     }
-    /*AUDITORIA DE RECHAZOS
-    guarda en la BD las transacciones rechazadas para trazabilidad */
-    private void registrarTransaccionRechazada(
-            Map<String, Object> cuenta,
-            BigDecimal monto,
-            String stan,
-            String codigoRespuesta) {
 
-        Long cuentaId =
-                ((Number) cuenta.get("id")).longValue();
-
+    private void registrarTransaccionRechazada(Long cuentaId, BigDecimal monto, String stan, String codigoRespuesta) {
         String sql = """
                 INSERT INTO transacciones
-                    (cuenta_id,
-                     monto,
-                     tipo,
-                     estado,
-                     codigo_respuesta,
-                     stan,
-                     fecha_hora)
+                    (cuenta_id, monto, tipo, estado, codigo_respuesta, stan, fecha_hora)
                 VALUES
-                    (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    (?, ?, 'PAGO', 'RECHAZADA', ?, ?, CURRENT_TIMESTAMP)
                 """;
-
-        jdbcTemplate.update(
-                sql,
-                cuentaId,
-                monto == null
-                        ? BigDecimal.ZERO
-                        : monto,
-                "PAGO",
-                "RECHAZADA",
-                codigoRespuesta,
-                stan
-        );
+        jdbcTemplate.update(sql, cuentaId, monto == null ? BigDecimal.ZERO : monto, codigoRespuesta, stan);
     }
 }
