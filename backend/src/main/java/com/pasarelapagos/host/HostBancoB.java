@@ -15,7 +15,7 @@ import java.util.Map;
 /**
  * Host emisor del Banco B (BIN 5222).
  * Conecta con el pool de conexiones dedicado a la base de datos de Banco B.
- * Optimizado para alta concurrencia: consultas optimizadas y débito atómico.
+ * Optimizado para alta concurrencia: consultas en un solo paso y débito atómico.
  */
 @Component
 public class HostBancoB {
@@ -46,74 +46,7 @@ public class HostBancoB {
     }
 
     /**
-     * Valida si la cuenta del Banco B puede realizar el pago.
-     */
-    public int validarPago(String pan, BigDecimal monto) {
-        try {
-            Map<String, Object> cuenta = buscarCuentaPorPan(pan);
-            return validarCuentaYSaldo(cuenta, monto);
-        } catch (Exception e) {
-            return 14;
-        }
-    }
-
-    private int validarCuentaYSaldo(Map<String, Object> cuenta, BigDecimal monto) {
-        String estado = String.valueOf(cuenta.get("estado"));
-        if (!"ACTIVA".equalsIgnoreCase(estado)) {
-            return 57; // Código 57: Cuenta inactiva
-        }
-
-        if (monto == null || monto.compareTo(BigDecimal.ZERO) <= 0) {
-            return 13; // Código 13: Monto inválido
-        }
-
-        BigDecimal saldo = (BigDecimal) cuenta.get("saldo");
-        if (saldo.compareTo(monto) < 0) {
-            return 51; // Código 51: Fondos insuficientes
-        }
-
-        return 0; // Validación exitosa
-    }
-
-    /**
-     * Registra la transacción y descuenta el saldo atómicamente.
-     */
-    public void registrarTransaccion(
-            String pan,
-            BigDecimal monto,
-            String stan,
-            String codigoRespuesta,
-            String estadoTransaccion) {
-
-        Map<String, Object> cuenta = buscarCuentaPorPan(pan);
-        Long cuentaId = ((Number) cuenta.get("id")).longValue();
-
-        if ("00".equals(codigoRespuesta) || "0".equals(codigoRespuesta)) {
-            bancoBJdbcTemplate.update(
-                    "UPDATE cuentas SET saldo = saldo - ? WHERE id = ? AND saldo >= ?",
-                    monto, cuentaId, monto
-            );
-        }
-
-        String insertTransaccion = """
-                INSERT INTO transacciones
-                    (cuenta_id, monto, tipo, estado, codigo_respuesta, stan, fecha_hora)
-                VALUES
-                    (?, ?, 'PAGO', ?, ?, ?, CURRENT_TIMESTAMP)
-                """;
-
-        bancoBJdbcTemplate.update(
-                insertTransaccion,
-                cuentaId,
-                monto == null ? BigDecimal.ZERO : monto,
-                estadoTransaccion,
-                codigoRespuesta,
-                stan
-        );
-    }
-
-    /**
-     * Motor principal de procesamiento de pagos Banco B con ejecución atómica de un solo paso.
+     * Motor principal de procesamiento de pagos Banco B con ejecución atómica y auditoría centralizada.
      */
     @Transactional(transactionManager = "bancoBTransactionManager")
     public int procesarPago(String pan, BigDecimal monto, String stan) {
@@ -129,14 +62,27 @@ public class HostBancoB {
 
         Long cuentaId = ((Number) cuenta.get("id")).longValue();
 
-        // 2. Validar reglas de negocio con la cuenta ya cargada (sin re-consultas SQL)
-        int validacion = validarCuentaYSaldo(cuenta, monto);
-        if (validacion != 0) {
-            registrarRechazoDirecto(cuentaId, monto, stan, String.format("%02d", validacion));
-            return validacion;
+        // 2. Validar estado de la cuenta
+        String estado = String.valueOf(cuenta.get("estado"));
+        if (!"ACTIVA".equalsIgnoreCase(estado)) {
+            registrarAuditoria(cuentaId, monto, stan, "RECHAZADA", IsoConstants.RESPONSE_ACCOUNT_NOT_ACTIVE);
+            return 57; // Código 57: Cuenta inactiva
         }
 
-        // 3. Débito atómico con cláusula de salvaguarda
+        // 3. Validar monto
+        if (monto == null || monto.compareTo(BigDecimal.ZERO) <= 0) {
+            registrarAuditoria(cuentaId, monto, stan, "RECHAZADA", IsoConstants.RESPONSE_INVALID_AMOUNT);
+            return 13; // Código 13: Monto inválido
+        }
+
+        // 4. Validar saldo disponible
+        BigDecimal saldo = (BigDecimal) cuenta.get("saldo");
+        if (saldo.compareTo(monto) < 0) {
+            registrarAuditoria(cuentaId, monto, stan, "RECHAZADA", IsoConstants.RESPONSE_INSUFFICIENT_FUNDS);
+            return 51; // Código 51: Fondos insuficientes
+        }
+
+        // 5. Débito atómico con cláusula de salvaguarda
         String updateSaldo = """
                 UPDATE cuentas
                 SET saldo = saldo - ?
@@ -145,34 +91,31 @@ public class HostBancoB {
 
         int filas = bancoBJdbcTemplate.update(updateSaldo, monto, cuentaId, monto);
         if (filas == 0) {
-            registrarRechazoDirecto(cuentaId, monto, stan, IsoConstants.RESPONSE_INSUFFICIENT_FUNDS);
+            registrarAuditoria(cuentaId, monto, stan, "RECHAZADA", IsoConstants.RESPONSE_INSUFFICIENT_FUNDS);
             return 51; // Fondos insuficientes por concurrencia
         }
 
-        // 4. Registro de auditoría contable
-        String insertTransaccion = """
-                INSERT INTO transacciones
-                    (cuenta_id, monto, tipo, estado, codigo_respuesta, stan, fecha_hora)
-                VALUES
-                    (?, ?, 'PAGO', 'APROBADA', '00', ?, CURRENT_TIMESTAMP)
-                """;
-
-        bancoBJdbcTemplate.update(insertTransaccion, cuentaId, monto, stan);
+        // 6. Registro de auditoría contable unificado
+        registrarAuditoria(cuentaId, monto, stan, "APROBADA", "00");
         log.debug("Host Banco B: Pago aprobado exitosamente para PAN {}", MaskingUtils.maskPan(pan));
         return 0; // Aprobado
     }
 
-    private void registrarRechazoDirecto(Long cuentaId, BigDecimal monto, String stan, String codigoRespuesta) {
-        String insertTransaccion = """
+    /**
+     * Registrador centralizado de auditoría en la tabla transacciones de Banco B.
+     */
+    private void registrarAuditoria(Long cuentaId, BigDecimal monto, String stan, String estado, String codigoRespuesta) {
+        String sql = """
                 INSERT INTO transacciones
                     (cuenta_id, monto, tipo, estado, codigo_respuesta, stan, fecha_hora)
                 VALUES
-                    (?, ?, 'PAGO', 'RECHAZADA', ?, ?, CURRENT_TIMESTAMP)
+                    (?, ?, 'PAGO', ?, ?, ?, CURRENT_TIMESTAMP)
                 """;
         bancoBJdbcTemplate.update(
-                insertTransaccion,
+                sql,
                 cuentaId,
                 monto == null ? BigDecimal.ZERO : monto,
+                estado,
                 codigoRespuesta,
                 stan
         );

@@ -64,21 +64,21 @@ public class HostBancoA {
 
         // 2. Verificar monto válido (> 0)
         if (monto == null || monto.compareTo(BigDecimal.ZERO) <= 0) {
-            registrarTransaccionRechazada(cuentaId, monto, stan, IsoConstants.RESPONSE_INVALID_AMOUNT);
+            registrarAuditoria(cuentaId, monto, stan, "RECHAZADA", IsoConstants.RESPONSE_INVALID_AMOUNT);
             return 13; // Código 13: Monto inválido
         }
 
         // 3. Verificar estado de la cuenta
         String estado = String.valueOf(cuenta.get("estado"));
         if (!"ACTIVA".equalsIgnoreCase(estado)) {
-            registrarTransaccionRechazada(cuentaId, monto, stan, IsoConstants.RESPONSE_ACCOUNT_NOT_ACTIVE);
+            registrarAuditoria(cuentaId, monto, stan, "RECHAZADA", IsoConstants.RESPONSE_ACCOUNT_NOT_ACTIVE);
             return 57; // Código 57: Cuenta inactiva o bloqueada
         }
 
         // 4. Verificar disponibilidad previa de saldo
         BigDecimal saldo = (BigDecimal) cuenta.get("saldo");
         if (saldo.compareTo(monto) < 0) {
-            registrarTransaccionRechazada(cuentaId, monto, stan, IsoConstants.RESPONSE_INSUFFICIENT_FUNDS);
+            registrarAuditoria(cuentaId, monto, stan, "RECHAZADA", IsoConstants.RESPONSE_INSUFFICIENT_FUNDS);
             return 51; // Código 51: Fondos insuficientes
         }
 
@@ -92,33 +92,26 @@ public class HostBancoA {
         int filasActualizadas = jdbcTemplate.update(sqlUpdateSaldo, monto, cuentaId, monto);
         if (filasActualizadas == 0) {
             // El saldo varió concurrentemente y ya no es suficiente
-            registrarTransaccionRechazada(cuentaId, monto, stan, IsoConstants.RESPONSE_INSUFFICIENT_FUNDS);
+            registrarAuditoria(cuentaId, monto, stan, "RECHAZADA", IsoConstants.RESPONSE_INSUFFICIENT_FUNDS);
             return 51;
         }
 
-        // 6. Registro contable del comprobante aprobado
-        registrarTransaccionAprobada(cuentaId, monto, stan);
+        // 6. Registro contable unificado del comprobante aprobado
+        registrarAuditoria(cuentaId, monto, stan, "APROBADA", "00");
         log.debug("Host Banco A: Pago aprobado exitosamente para PAN {}", MaskingUtils.maskPan(pan));
         return 0; // Código 00: Pago aprobado
     }
 
-    private void registrarTransaccionAprobada(Long cuentaId, BigDecimal monto, String stan) {
-        String insertTransaccion = """
-                INSERT INTO transacciones
-                    (cuenta_id, monto, tipo, estado, codigo_respuesta, stan, fecha_hora)
-                VALUES
-                    (?, ?, 'PAGO', 'APROBADA', '00', ?, CURRENT_TIMESTAMP)
-                """;
-        jdbcTemplate.update(insertTransaccion, cuentaId, monto, stan);
-    }
-
-    private void registrarTransaccionRechazada(Long cuentaId, BigDecimal monto, String stan, String codigoRespuesta) {
+    /**
+     * Registrador centralizado de auditoría en la tabla transacciones.
+     */
+    private void registrarAuditoria(Long cuentaId, BigDecimal monto, String stan, String estado, String codigoRespuesta) {
         String sql = """
                 INSERT INTO transacciones
                     (cuenta_id, monto, tipo, estado, codigo_respuesta, stan, fecha_hora)
                 VALUES
-                    (?, ?, 'PAGO', 'RECHAZADA', ?, ?, CURRENT_TIMESTAMP)
+                    (?, ?, 'PAGO', ?, ?, ?, CURRENT_TIMESTAMP)
                 """;
-        jdbcTemplate.update(sql, cuentaId, monto == null ? BigDecimal.ZERO : monto, codigoRespuesta, stan);
+        jdbcTemplate.update(sql, cuentaId, monto == null ? BigDecimal.ZERO : monto, estado, codigoRespuesta, stan);
     }
 }

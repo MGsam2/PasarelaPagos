@@ -75,7 +75,7 @@ public class IsoTransactionService {
 
             // 4. Verificación de Idempotencia: evita cobros duplicados en reintentos de red
             if (idempotenciaService.esTransaccionDuplicada(claveIdempotencia)) {
-                log.info("Transacción duplicada detectada para clave {}. Retornando respuesta en caché.", claveIdempotencia);
+                log.info("Transacción duplicada detectada para clave {}. Retornando respuesta previa.", claveIdempotencia);
                 codigoRespuesta = idempotenciaService.obtenerRespuestaPrevia(claveIdempotencia);
             } else {
                 // 5. Procesamiento transaccional (adaptador HTTP RestClient o directo según configuración)
@@ -113,17 +113,16 @@ public class IsoTransactionService {
                     ? IsoConstants.RESPONSE_INVALID_ACCOUNT
                     : IsoConstants.RESPONSE_FORMAT_ERROR;
 
-            ISOMsg respuesta = isoResponseMapper.crearRespuestaError(solicitud, codigoError);
-            return isoParser.pack(respuesta);
+            return responderConError(solicitud, codigoError);
 
         } catch (Exception exception) {
             log.error("Fallo inesperado del sistema al procesar trama ISO: {}", exception.getMessage(), exception);
-            // Estándar ISO 8583: Fallos internos del sistema responden con código 96 (System Error)
-            ISOMsg respuesta = isoResponseMapper.crearRespuestaError(
-                    solicitud,
-                    IsoConstants.RESPONSE_SYSTEM_ERROR
-            );
-            return isoParser.pack(respuesta);
+            return responderConError(solicitud, IsoConstants.RESPONSE_SYSTEM_ERROR);
         }
+    }
+
+    private byte[] responderConError(ISOMsg solicitud, String codigoError) throws Exception {
+        ISOMsg respuesta = isoResponseMapper.crearRespuestaDesdeCodigo(solicitud, codigoError);
+        return isoParser.pack(respuesta);
     }
 }

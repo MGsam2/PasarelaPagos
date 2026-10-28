@@ -6,14 +6,20 @@ import org.jpos.iso.packager.GenericPackager;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Fábrica de mensajes ISO 8583.
  * Carga las especificaciones estructurales de la trama bancaria desde pasarela-packager.xml.
- * Inicializa el packager y construye tramas financieras (MTI 0200) completas.
+ * Optimizado para alta concurrencia mediante reutilización de formateadores y captura atómica de tiempo.
  */
 @Component
 public class IsoMessageFactory {
+
+    private static final DateTimeFormatter FORMATO_TRANSMISION = DateTimeFormatter.ofPattern("MMddHHmmss");
+    private static final DateTimeFormatter FORMATO_HORA_LOCAL = DateTimeFormatter.ofPattern("HHmmss");
+    private static final DateTimeFormatter FORMATO_FECHA_LOCAL = DateTimeFormatter.ofPattern("MMdd");
 
     private final ISOPackager packager;
 
@@ -31,7 +37,7 @@ public class IsoMessageFactory {
     }
 
     /**
-     * Construye un objeto ISOMsg 0200 asignando sellos temporales (DE 7, 12, 13) y moneda (DE 49).
+     * Construye un objeto ISOMsg 0200 asignando sellos temporales atómicos y moneda estándar (DE 49).
      */
     public ISOMsg crearMensajePago(
             String pan,
@@ -56,17 +62,20 @@ public class IsoMessageFactory {
         // DE 4 - Monto en centavos (12 dígitos numéricos)
         mensaje.set(4, monto);
 
+        // Captura atómica única de tiempo para sincronía estricta de DE 7, DE 12 y DE 13
+        LocalDateTime timestamp = LocalDateTime.now();
+
         // DE 7 - Fecha y hora de transmisión (MMddHHmmss)
-        mensaje.set(7, obtenerFechaTransmision());
+        mensaje.set(7, timestamp.format(FORMATO_TRANSMISION));
 
         // DE 11 - STAN (Auditoría de 6 dígitos)
         mensaje.set(11, stan);
 
         // DE 12 - Hora local (HHmmss)
-        mensaje.set(12, obtenerHoraLocal());
+        mensaje.set(12, timestamp.format(FORMATO_HORA_LOCAL));
 
         // DE 13 - Fecha local (MMdd)
-        mensaje.set(13, obtenerFechaLocal());
+        mensaje.set(13, timestamp.format(FORMATO_FECHA_LOCAL));
 
         // DE 37 - RRN (12 caracteres normalizados)
         mensaje.set(37, generarReferencia(stan));
@@ -81,21 +90,6 @@ public class IsoMessageFactory {
         mensaje.set(49, IsoConstants.CURRENCY_GUATEMALA);
 
         return mensaje;
-    }
-
-    private String obtenerFechaTransmision() {
-        return java.time.LocalDateTime.now()
-                .format(java.time.format.DateTimeFormatter.ofPattern("MMddHHmmss"));
-    }
-
-    private String obtenerHoraLocal() {
-        return java.time.LocalTime.now()
-                .format(java.time.format.DateTimeFormatter.ofPattern("HHmmss"));
-    }
-
-    private String obtenerFechaLocal() {
-        return java.time.LocalDate.now()
-                .format(java.time.format.DateTimeFormatter.ofPattern("MMdd"));
     }
 
     private String generarReferencia(String stan) {
