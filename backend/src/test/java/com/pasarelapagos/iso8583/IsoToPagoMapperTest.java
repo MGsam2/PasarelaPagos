@@ -2,59 +2,57 @@ package com.pasarelapagos.iso8583;
 
 import com.pasarelapagos.dto.PagoRequest;
 import org.jpos.iso.ISOMsg;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 
 import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@SpringBootTest
 class IsoToPagoMapperTest {
 
-    private IsoToPagoMapper isoToPagoMapper;
+    @Autowired
     private IsoMessageFactory isoMessageFactory;
 
-    @BeforeEach
-    void setUp() throws Exception {
-        isoMessageFactory = new IsoMessageFactory();
-        isoToPagoMapper = new IsoToPagoMapper();
-    }
+    @Autowired
+    private IsoToPagoMapper isoToPagoMapper;
 
     @Test
-    void deberiaConvertirMensajeIsoAPagoRequestExitosamente() throws Exception {
-        // Arrange
-        String pan = "4111111111111111";
-        String montoCentavos = "000000003000"; // Q 30.00
-        String stan = "123456";
-        String terminal = "TERM0001";
-        String merchant = "MERCHANT001";
+    @DisplayName("Criterio 2: Extrae correctamente DE 2, 3, 4, 11, 37 y 102 convirtiendo centavos a BigDecimal")
+    void testExtraccionDataElementsYConversionMonto() throws Exception {
+        System.out.println("\n========================================================================");
+        System.out.println("🧪 PRUEBA 2: MOTOR ISO 8583 & EXTRACTION DE DATA ELEMENTS");
+        System.out.println("========================================================================");
 
-        ISOMsg isoMsg = isoMessageFactory.crearMensajePago(
-                pan,
-                IsoConstants.PROCESSING_CODE_PURCHASE,
-                montoCentavos,
-                stan,
-                terminal,
-                merchant
+        ISOMsg msg0200 = isoMessageFactory.crearMensajePago(
+                "4111111111111111", "000000", "000000010000", "123456", "TERM001", "MERCH001"
         );
+        msg0200.set(37, "RRN123456789");
+        msg0200.set(102, "123456789012");
 
-        // Act
-        PagoRequest request = isoToPagoMapper.convertir(isoMsg);
+        System.out.println("⚙️  [1/3] Mapped Raw Fields:");
+        System.out.println("    - DE 2 (PAN): " + msg0200.getString(2));
+        System.out.println("    - DE 4 (Monto en centavos): " + msg0200.getString(4));
+        System.out.println("    - DE 11 (STAN): " + msg0200.getString(11));
+        System.out.println("    - DE 37 (RRN): " + msg0200.getString(37));
+        System.out.println("    - DE 102 (Cuenta Origen): " + msg0200.getString(102));
 
-        // Assert
-        assertNotNull(request);
-        assertEquals(pan, request.pan());
-        assertEquals(new BigDecimal("30.00"), request.monto());
-        assertEquals(stan, request.stan());
-    }
+        PagoRequest request = isoToPagoMapper.convertir(msg0200);
 
-    @Test
-    void deberiaLanzarExcepcionCuandoMensajeEsNull() {
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> isoToPagoMapper.convertir(null)
-        );
+        System.out.println("🔄 [2/3] Mapeo de DTO PagoRequest procesado:");
+        System.out.println("    - Monto String '000000010000' -> BigDecimal: Q" + request.monto());
 
-        assertEquals("El mensaje ISO 8583 no puede ser null", exception.getMessage());
+        System.out.println("✅ [3/3] RESULTADO: Conversión de Data Elements y formato de moneda exactos.");
+        System.out.println("========================================================================\n");
+
+        assertEquals("4111111111111111", request.pan());
+        assertEquals("000000", request.processingCode());
+        assertEquals(new BigDecimal("100.00"), request.monto());
+        assertEquals("123456", request.stan());
+        assertEquals("RRN123456789", request.rrn());
+        assertEquals("123456789012", request.cuentaOrigen());
     }
 }

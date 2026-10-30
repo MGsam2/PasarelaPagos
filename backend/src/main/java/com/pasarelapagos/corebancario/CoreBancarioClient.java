@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 /**
  * Cliente HTTP resiliente para el Core Bancario basado en RestClient.
@@ -43,7 +44,7 @@ public class CoreBancarioClient {
     }
 
     /**
-     * Procesa la transacción hacia el Core Bancario con captura y traducción de fallos a código ISO 96.
+     * Procesa la transacción hacia el Core Bancario con captura y traducción de fallos a códigos ISO (51, 54, 96).
      */
     public RuteadorPagoResponse procesarPagoCore(PagoRequest pagoRequest) {
         try {
@@ -56,7 +57,22 @@ public class CoreBancarioClient {
                           "&stan=" + pagoRequest.stan())
                     .retrieve()
                     .body(RuteadorPagoResponse.class);
+
+        } catch (RestClientResponseException ex) {
+            // Captura errores HTTP (Ej: 400 Bad Request) cuando el Core rechaza la transacción por reglas de negocio
+            String responseBody = ex.getResponseBodyAsString();
+            log.warn("El Core Bancario rechazó la transacción por motivos de negocio: {}", responseBody);
+            
+            if (responseBody.contains("FONDOS_INSUFICIENTES")) {
+                return new RuteadorPagoResponse("DESCONOCIDO", 51, "RECHAZADO - Fondos Insuficientes");
+            } else if (responseBody.contains("TARJETA_VENCIDA")) {
+                return new RuteadorPagoResponse("DESCONOCIDO", 54, "RECHAZADO - Tarjeta Vencida");
+            } else {
+                return new RuteadorPagoResponse("DESCONOCIDO", 96, "ERROR_CORE - Rechazo no mapeado");
+            }
+            
         } catch (Exception e) {
+            // Captura fallos críticos de red (Timeout, Connection Refused, o 500 Internal Server Error puro)
             log.error("Fallo de comunicación HTTP con Core Bancario vía RestClient: {}", e.getMessage());
             return new RuteadorPagoResponse("DESCONOCIDO", 96, "ERROR_CORE - Error de comunicación del sistema");
         }

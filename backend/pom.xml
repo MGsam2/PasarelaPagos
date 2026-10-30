@@ -16,6 +16,8 @@
 
     <properties>
         <java.version>21</java.version>
+        <graalvm.metadataRepository.enabled>false</graalvm.metadataRepository.enabled>
+        <scala.version>2.13.12</scala.version>
     </properties>
 
     <dependencies>
@@ -94,6 +96,19 @@
             <version>3.3.1</version>
             <scope>test</scope>
         </dependency>
+        <!-- Gatling High-Performance Load Testing -->
+        <dependency>
+            <groupId>io.gatling.highcharts</groupId>
+            <artifactId>gatling-charts-highcharts</artifactId>
+            <version>3.10.5</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.gatling</groupId>
+            <artifactId>gatling-app</artifactId>
+            <version>3.10.5</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -107,6 +122,61 @@
                 <groupId>org.graalvm.buildtools</groupId>
                 <artifactId>native-maven-plugin</artifactId>
             </plugin>
+
+            <!-- Plugin Compilador de Scala para Gatling -->
+            <plugin>
+                <groupId>net.alchim31.maven</groupId>
+                <artifactId>scala-maven-plugin</artifactId>
+                <version>4.8.1</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>testCompile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Plugin de Ejecución Gatling -->
+            <plugin>
+                <groupId>io.gatling</groupId>
+                <artifactId>gatling-maven-plugin</artifactId>
+                <version>4.8.0</version>
+                <configuration>
+                    <simulationClass>com.pasarelapagos.IsoTransactionSimulation</simulationClass>
+                </configuration>
+            </plugin>
+
+            <!-- Plugin JaCoCo para Cobertura de Código (>80%) -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <configuration>
+                    <excludes>
+                        <exclude>com/pasarelapagos/entity/**</exclude>
+                        <exclude>com/pasarelapagos/dto/**</exclude>
+                        <exclude>com/pasarelapagos/config/**</exclude>
+                        <exclude>com/pasarelapagos/PasarelaPagosApplication.class</exclude>
+                    </excludes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+
         </plugins>
     </build>
 </project>

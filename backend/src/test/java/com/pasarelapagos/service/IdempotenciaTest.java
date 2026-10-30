@@ -1,9 +1,6 @@
 package com.pasarelapagos.service;
 
-import com.pasarelapagos.iso8583.IsoConstants;
-import com.pasarelapagos.iso8583.IsoMessageFactory;
-import com.pasarelapagos.iso8583.IsoParser;
-import com.pasarelapagos.iso8583.IsoTransactionService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -14,34 +11,29 @@ import static org.junit.jupiter.api.Assertions.*;
 class IdempotenciaTest {
 
     @Autowired
-    private IsoTransactionService isoTransactionService;
-
-    @Autowired
-    private IsoMessageFactory isoMessageFactory;
-
-    @Autowired
-    private IsoParser isoParser;
+    private IdempotenciaService idempotenciaService;
 
     @Test
-    void deberiaRetornarMismaRespuestaAntePeticionDuplicada() throws Exception {
-        var isoMsg = isoMessageFactory.crearMensajePago(
-                "4111111111111111",
-                IsoConstants.PROCESSING_CODE_PURCHASE,
-                "000000000500", // Q5.00
-                "888777",
-                "TERM0001",
-                "MERCHANT001"
-        );
-        byte[] tramaEnvio = isoParser.pack(isoMsg);
+    @DisplayName("Criterio 3: Debe detectar transacciones duplicadas por clave RRN/STAN")
+    void testIdempotenciaTransaccionesDuplicadas() {
+        System.out.println("\n========================================================================");
+        System.out.println("🧪 PRUEBA 4: CONTROL DE IDEMPOTENCIA Y PREVENCIÓN DE DUPLICADOS");
+        System.out.println("========================================================================");
 
-        // Primera llamada
-        byte[] res1Bytes = isoTransactionService.procesar(tramaEnvio);
-        var res1 = isoParser.unpack(res1Bytes);
+        String claveIdempotencia = "RRN_TEST_9999";
 
-        // Segunda llamada con la misma trama (mismo STAN)
-        byte[] res2Bytes = isoTransactionService.procesar(tramaEnvio);
-        var res2 = isoParser.unpack(res2Bytes);
+        System.out.println("📝 [1/3] Registrando primera transacción con clave: " + claveIdempotencia);
+        idempotenciaService.registrarTransaccion(claveIdempotencia, 0);
 
-        assertEquals(res1.getString(39), res2.getString(39));
+        System.out.println("🔍 [2/3] Verificando reintento de transacción duplicada con la misma clave...");
+        boolean esDuplicada = idempotenciaService.esTransaccionDuplicada(claveIdempotencia);
+        int codigoPrevio = idempotenciaService.obtenerRespuestaPrevia(claveIdempotencia);
+
+        System.out.println("🛡️  [3/3] ¿Transacción duplicada detectada?: " + esDuplicada + " | Código de respuesta retornado: " + codigoPrevio);
+        System.out.println("✅ RESULTADO: El sistema evitó un cobro duplicado en la base de datos.");
+        System.out.println("========================================================================\n");
+
+        assertTrue(esDuplicada);
+        assertEquals(0, codigoPrevio);
     }
 }

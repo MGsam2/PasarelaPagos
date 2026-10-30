@@ -14,6 +14,12 @@ spring:
       hibernate:
         format_sql: false
 
+  # Configuración del Pool HikariCP para soportar alta concurrencia (Indentado dentro de spring)
+  datasource:
+    hikari:
+      maximum-pool-size: 50
+      minimum-idle: 10
+
 # Puerto del Servidor TCP de Ingesta ISO 8583
 tcp:
   server:
@@ -24,4 +30,3 @@ corebancario:
   url: "http://localhost:8080"
   adapter:
     mode: "direct"
-

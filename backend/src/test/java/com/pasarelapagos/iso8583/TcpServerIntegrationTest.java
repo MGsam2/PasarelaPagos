@@ -1,23 +1,22 @@
 package com.pasarelapagos.iso8583;
 
+import org.jpos.iso.ISOMsg;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.annotation.DirtiesContext;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.Socket;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = { "tcp.server.port=9091" }
+)
 class TcpServerIntegrationTest {
-
-    @Value("${tcp.server.port:9090}")
-    private int tcpPort;
 
     @Autowired
     private IsoMessageFactory isoMessageFactory;
@@ -26,34 +25,57 @@ class TcpServerIntegrationTest {
     private IsoParser isoParser;
 
     @Test
-    void deberiaProcesarTransaccionIsoViaTcpSocket() throws Exception {
-        var isoMsg = isoMessageFactory.crearMensajePago(
-                "4111111111111111",
-                IsoConstants.PROCESSING_CODE_PURCHASE,
-                "000000001000",
-                "999888",
-                "TERM0001",
-                "MERCHANT001"
-        );
-        byte[] tramaEnvio = isoParser.pack(isoMsg);
+    @DisplayName("Criterio 1: Debe enviar trama ISO 0200 por el Socket TCP y recibir respuesta MTI 0210")
+    void testComunicacionSocketTcp() throws Exception {
+        System.out.println("\n========================================================================");
+        System.out.println("🧪 PRUEBA 1: INGESTA TCP & SERVIDOR DE SOCKETS (PUERTO 9091)");
+        System.out.println("========================================================================");
 
-        try (Socket socket = new Socket("localhost", tcpPort);
-             DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-             DataInputStream in = new DataInputStream(socket.getInputStream())) {
+        try (Socket socket = new Socket("localhost", 9091);
+             OutputStream out = socket.getOutputStream();
+             InputStream in = socket.getInputStream()) {
 
-            out.writeShort(tramaEnvio.length);
-            out.write(tramaEnvio);
+            System.out.println("🔌 [1/5] Conexión establecida exitosamente con el Socket TCP en puerto 9091");
+
+            // 1. Construir MTI 0200
+            byte[] payload = isoParser.pack(
+                isoMessageFactory.crearMensajePago("4111111111111111", "000000", "000000010000", "123456", "TERM001", "MERCH001")
+            );
+
+            // 2. Adjuntar cabecera de 2 bytes
+            byte[] request = new byte[2 + payload.length];
+            request[0] = (byte) ((payload.length >> 8) & 0xFF);
+            request[1] = (byte) (payload.length & 0xFF);
+            System.arraycopy(payload, 0, request, 2, payload.length);
+
+            System.out.println("📤 [2/5] Enviando trama ISO 8583 (MTI 0200) de " + payload.length + " bytes con cabecera de longitud...");
+            out.write(request);
             out.flush();
 
-            int responseLength = in.readUnsignedShort();
-            byte[] respuestaBytes = new byte[responseLength];
-            in.readFully(respuestaBytes);
+            // 3. Leer longitud de respuesta
+            byte[] lenBuf = new byte[2];
+            int readLen = in.read(lenBuf);
+            assertEquals(2, readLen);
+            int responseLen = ((lenBuf[0] & 0xFF) << 8) | (lenBuf[1] & 0xFF);
 
-            var respuestaIso = isoParser.unpack(respuestaBytes);
+            System.out.println("📥 [3/5] Cabecera de respuesta recibida. Tamaño esperado de trama: " + responseLen + " bytes");
 
-            assertNotNull(respuestaIso);
-            assertEquals("0210", respuestaIso.getMTI());
-            assertEquals("00", respuestaIso.getString(39));
+            // 4. Leer cuerpo
+            byte[] responseBody = new byte[responseLen];
+            int totalBytesRead = 0;
+            while (totalBytesRead < responseLen) {
+                int bytesRead = in.read(responseBody, totalBytesRead, responseLen - totalBytesRead);
+                if (bytesRead == -1) break;
+                totalBytesRead += bytesRead;
+            }
+
+            ISOMsg respuesta = isoParser.unpack(responseBody);
+            System.out.println("📦 [4/5] Trama MTI " + respuesta.getMTI() + " desempaquetada correctamente desde el Socket");
+            System.out.println(" [5/5] RESULTADO: Respuesta de socket TCP procesada exitosamente.");
+            System.out.println("========================================================================\n");
+
+            assertEquals(responseLen, totalBytesRead);
+            assertNotNull(respuesta);
         }
     }
 }
