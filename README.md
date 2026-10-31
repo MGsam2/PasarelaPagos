@@ -66,9 +66,12 @@ backend/
 │   └── test/                    # Pruebas unitarias, WireMock y Gatling/JMeter
 ├── Dockerfile                   # Multi-stage build (GraalVM 25 + Distroless nonroot)
 └── README.md                    # Documentación de arquitectura y reporte de pruebas
+
+
  ---
 ## 5. Instrucciones para Compilación y Ejecución
 Opción A: Modo JVM Tradicional
+
 Bash
 # Compilar el proyecto saltando pruebas
 .\mvnw.cmd clean package -DskipTests
@@ -81,3 +84,24 @@ Opción B: Ejecución de Pruebas Automatizadas
 Bash
 # Ejecutar todas las pruebas unitarias y de integración con reporte JaCoCo
 .\mvnw.cmd clean test
+
+Opción C: Ejecucion de pruebas desde frontend
+en una terminal ubiquece en la carpeta del proyecto del backend
+cd C:\*\PasarelaPagos\backend
+
+ubicado en la carpeta backend escriba para ejecutar el backend
+.\mvnw.cmd spring-boot:run 
+
+luego ubiquese en la carpeta frontend
+cd C:\*\PasarelaPagos\frontend
+
+ubicado en la carpeta frontend escriba el comando para ejecutar el frontend
+npm run dev  
+
+dirigase al puerto mostrado en la terminal del front
+http://localhost:5173/
+
+le mostrara el formulario de pago donde podra seleccionar la cantidad de producto a pagar.
+pruebe ingresando el pan 4111 1111 1111 1111
+
+donde debitara el cobro dependiento si la tarjeta comience por 4111 hacia el banco_A o 5222 hacia el banco_B
