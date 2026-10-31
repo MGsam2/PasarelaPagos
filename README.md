@@ -1,6 +1,7 @@
 # Pasarela de Pagos Transaccional de Alto Rendimiento
 
-**Pila Tecnológica:** Java 21+ (Recomendado Java 25), Spring Boot 4.1, Jakarta EE 11, GraalVM Native Image 25, PostgreSQL.  
+**Pila Tecnológica:** Java 21+ (Recomendado Java 25), Spring Boot 4.1, Jakarta EE 11, GraalVM Native Image 25 y PostgreSQL.
+
 **Arquitectura:** Recolector Transaccional ISO 8583 no bloqueante asistido por Virtual Threads (Project Loom) y cliente HTTP resiliente basado en `RestClient`.
 
 ---
@@ -33,11 +34,11 @@ Resultado de la suite de pruebas automatizadas ejecutada con el Wrapper de Maven
 
 | Métrica | Requisito / Objetivo | Valor Demostrado | Validación |
 | :--- | :--- | :---: | :--- |
-| **Tiempo de Arranque (Startup)** | $< 100\text{ ms}$ (Binario Nativo) | **$48\text{ ms}$** | Verificado en arranque de GraalVM Native Image. |
-| **Consumo de Memoria RAM (RSS)** | Mínimo en Contenedor OCI | **$68\text{ MB}$** | Medido en proceso activo bajo carga. |
-| **Pausas de Garbage Collector** | $\le 1\text{ ms}$ (Generational ZGC) | **$0.24\text{ ms}$** | Confirmado con flags `-XX:+UseZGC -XX:+ZGenerational`. |
-| **Rendimiento Transaccional** | $\ge 2,000\text{ TPS}$ | **$2,350\text{ TPS}$** | Sostenido mediante Gatling sobre Virtual Threads. |
-| **Cobertura de Pruebas Unitarias** | $> 80\%$ | **$88.5\%$** | Evaluado mediante reporte JaCoCo. |
+| **Tiempo de Arranque (Startup)** | < 100 ms (Binario Nativo) | **48 ms** | Verificado en arranque de GraalVM Native Image. |
+| **Consumo de Memoria RAM (RSS)** | Mínimo en Contenedor OCI | **68 MB** | Medido en proceso activo bajo carga. |
+| **Pausas de Garbage Collector** | ≤ 1 ms (Generational ZGC) | **0.24 ms** | Confirmado con flags `-XX:+UseZGC -XX:+ZGenerational`. |
+| **Rendimiento Transaccional** | ≥ 2,000 TPS | **2,350 TPS** | Sostenido mediante Gatling sobre Virtual Threads. |
+| **Cobertura de Pruebas Unitarias** | > 80% | **88.5%** | Evaluado mediante reporte JaCoCo. |
 
 ---
 
@@ -66,42 +67,77 @@ backend/
 │   └── test/                    # Pruebas unitarias, WireMock y Gatling/JMeter
 ├── Dockerfile                   # Multi-stage build (GraalVM 25 + Distroless nonroot)
 └── README.md                    # Documentación de arquitectura y reporte de pruebas
+```
 
+---
 
- ---
 ## 5. Instrucciones para Compilación y Ejecución
-Opción A: Modo JVM Tradicional
 
-Bash
-# Compilar el proyecto saltando pruebas
+### Opción A: Modo JVM Tradicional
+
+**Compilar el proyecto saltando las pruebas:**
+
+```bash
 .\mvnw.cmd clean package -DskipTests
+```
 
-# Ejecutar con habilitación de Virtual Threads y Generational ZGC
+**Ejecutar con habilitación de Virtual Threads y Generational ZGC:**
+
+```bash
 java -XX:+UseZGC -XX:+ZGenerational -jar target/pasarela-pagos-0.0.1-SNAPSHOT.jar
+```
 
+### Opción B: Ejecución de Pruebas Automatizadas
 
-Opción B: Ejecución de Pruebas Automatizadas
-Bash
-# Ejecutar todas las pruebas unitarias y de integración con reporte JaCoCo
+Ejecutar todas las pruebas unitarias y de integración con reporte JaCoCo:
+
+```bash
 .\mvnw.cmd clean test
+```
 
-Opción C: Ejecucion de pruebas desde frontend
-en una terminal ubiquece en la carpeta del proyecto del backend
+### Opción C: Ejecución de Pruebas desde el Frontend
+
+**Paso 1.** Abra una terminal y ubíquese en la carpeta del proyecto backend:
+
+```bash
 cd C:\*\PasarelaPagos\backend
+```
 
-ubicado en la carpeta backend escriba para ejecutar el backend
-.\mvnw.cmd spring-boot:run 
+**Paso 2.** Ubicado en la carpeta `backend`, ejecute el siguiente comando para iniciar el backend:
 
-luego ubiquese en la carpeta frontend
+```bash
+.\mvnw.cmd spring-boot:run
+```
+
+**Paso 3.** Abra otra terminal y ubíquese en la carpeta del proyecto frontend:
+
+```bash
 cd C:\*\PasarelaPagos\frontend
+```
 
-ubicado en la carpeta frontend escriba el comando para ejecutar el frontend
-npm run dev  
+**Paso 4.** Ubicado en la carpeta `frontend`, ejecute el siguiente comando para iniciar el frontend:
 
-dirigase al puerto mostrado en la terminal del front
-http://localhost:5173/
+```bash
+npm run dev
+```
 
-le mostrara el formulario de pago donde podra seleccionar la cantidad de producto a pagar.
-pruebe ingresando el pan 4111 1111 1111 1111
+**Paso 5.** Diríjase al puerto mostrado en la terminal del frontend. Generalmente:
 
-donde debitara el cobro dependiento si la tarjeta comience por 4111 hacia el banco_A o 5222 hacia el banco_B
+[http://localhost:5173/](http://localhost:5173/)
+
+Se mostrará el formulario de pago, donde podrá seleccionar la cantidad de productos a pagar.
+
+**Paso 6. Prueba de pago con tarjeta**
+
+Ingrese el siguiente PAN de prueba:
+
+```text
+4111 1111 1111 1111
+```
+
+El sistema realizará el débito correspondiente dependiendo del prefijo de la tarjeta:
+
+- **4111:** Enruta la transacción hacia el `Banco_A`.
+- **5222:** Enruta la transacción hacia el `Banco_B`.
+
+---
