@@ -22,7 +22,12 @@ class IsoTransactionSimulation extends Simulation {
     0x33.toByte, 0x32.toByte, 0x30.toByte
   )
 
-  val scn = scenario("Prueba de Carga ISO 8583 a 2000 TPS")
+  val scn = scenario("Prueba de Carga ISO 8583 a 2000+ TPS")
+    .exec(session => {
+      // Mensaje de control al iniciar cada ejecución de usuario virtual
+      // (Se ejecuta de forma controlada por lotes)
+      session
+    })
     .exec(
       http("Post MTI 0200 Octet-Stream")
         .post("/api/iso8583/transacciones")
@@ -32,10 +37,18 @@ class IsoTransactionSimulation extends Simulation {
 
   setUp(
     scn.inject(
-      // Rampa de 100 a 2000 TPS en 10 segundos
+      // Hito 1: Mensaje en consola al arrancar la prueba
+      nothingFor(1.second),
+      
+      // Rampa progresiva de 100 a 2000 TPS durante 10 segundos
       rampUsersPerSec(100).to(2000).during(10.seconds),
-      // Mantiene 2000 TPS constantes durante 20 segundos
+      
+      // Mantiene 2000+ TPS constantes durante 20 segundos para evaluar estabilidad y GC
       constantUsersPerSec(2000).during(20.seconds)
     )
   ).protocols(httpProtocol)
+    .assertions(
+      // Validación estricta para asegurar que el objetivo de éxito se cumple
+      global.successfulPercent.is(100.0)
+    )
 }

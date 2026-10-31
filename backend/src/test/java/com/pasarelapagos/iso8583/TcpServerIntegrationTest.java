@@ -31,11 +31,14 @@ class TcpServerIntegrationTest {
         System.out.println("🧪 PRUEBA 1: INGESTA TCP & SERVIDOR DE SOCKETS (PUERTO 9091)");
         System.out.println("========================================================================");
 
+        // Cronómetro de precisión para medir el tiempo de socket end-to-end
+        long startTime = System.nanoTime();
+
         try (Socket socket = new Socket("localhost", 9091);
              OutputStream out = socket.getOutputStream();
              InputStream in = socket.getInputStream()) {
 
-            System.out.println("🔌 [1/5] Conexión establecida exitosamente con el Socket TCP en puerto 9091");
+            System.out.println("🔌 [1/6] Conexión establecida exitosamente con el Socket TCP en puerto 9091");
 
             // 1. Construir MTI 0200
             byte[] payload = isoParser.pack(
@@ -48,7 +51,7 @@ class TcpServerIntegrationTest {
             request[1] = (byte) (payload.length & 0xFF);
             System.arraycopy(payload, 0, request, 2, payload.length);
 
-            System.out.println("📤 [2/5] Enviando trama ISO 8583 (MTI 0200) de " + payload.length + " bytes con cabecera de longitud...");
+            System.out.println("📤 [2/6] Enviando trama ISO 8583 (MTI 0200) de " + payload.length + " bytes con cabecera de longitud...");
             out.write(request);
             out.flush();
 
@@ -58,7 +61,7 @@ class TcpServerIntegrationTest {
             assertEquals(2, readLen);
             int responseLen = ((lenBuf[0] & 0xFF) << 8) | (lenBuf[1] & 0xFF);
 
-            System.out.println("📥 [3/5] Cabecera de respuesta recibida. Tamaño esperado de trama: " + responseLen + " bytes");
+            System.out.println("📥 [3/6] Cabecera de respuesta recibida. Tamaño esperado de trama: " + responseLen + " bytes");
 
             // 4. Leer cuerpo
             byte[] responseBody = new byte[responseLen];
@@ -70,12 +73,19 @@ class TcpServerIntegrationTest {
             }
 
             ISOMsg respuesta = isoParser.unpack(responseBody);
-            System.out.println("📦 [4/5] Trama MTI " + respuesta.getMTI() + " desempaquetada correctamente desde el Socket");
-            System.out.println(" [5/5] RESULTADO: Respuesta de socket TCP procesada exitosamente.");
+            
+            long endTime = System.nanoTime();
+            double durationMs = (endTime - startTime) / 1_000_000.0;
+
+            System.out.println("📦 [4/6] Trama MTI " + respuesta.getMTI() + " desempaquetada correctamente desde el Socket");
+            System.out.printf("⏱️  [5/6] Latencia de Red y Sockets (End-to-End): %.3f ms\n", durationMs);
+            System.out.println("✅ [6/6] RESULTADO: Respuesta de socket TCP procesada exitosamente.");
             System.out.println("========================================================================\n");
 
             assertEquals(responseLen, totalBytesRead);
             assertNotNull(respuesta);
+            assertEquals("0210", respuesta.getMTI());
+            assertTrue(durationMs < 3000, "La comunicación TCP debe completarse en menos de 3 segundos");
         }
     }
 }
