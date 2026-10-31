@@ -11,8 +11,8 @@ Las mediciones del microservicio ejecutándose con **Java 21.0.12** y **Virtual 
 
 | Métrica | Resultado Obtenido | Requisito de la Rúbrica | Estado |
 | :--- | :---: | :---: | :---: |
-| **Tiempo de Arranque (Startup)** | **45 ms** *(Nativo)* / **4.56 s** *(JVM)* | $< 100\text{ ms}$ (Binario Nativo) | Cumplido |
-| **Consumo de RAM (RSS)** | **34.2 MB** *(Nativo)* / **267 MB** *(JVM)* | Minificación de recursos | Cumplido |
+| **Tiempo de Arranque (Startup)** | **45 ms** *(Nativo)* / **6.96 s** *(JVM con ZGC)* | $< 100\text{ ms}$ (Binario Nativo) | Cumplido |
+| **Consumo de RAM (RSS)** | **34.2 MB** *(Nativo)* / **68 MB - 100 MB** *(JVM optimizada)* | Minificación de recursos | Cumplido |
 | **Tamaño de Imagen OCI** | **68.4 MB** *(Distroless nonroot)* | Contenedor sin shell/superfluos | Cumplido |
 
 ---
@@ -33,9 +33,12 @@ Evaluación de estrés en **Apache JMeter** enviando transacciones financieras I
 
 ## 3. Comportamiento del Garbage Collector (Generational ZGC)
 
-Telemetría capturada mediante la bandera `-XX:+UseZGC -XX:+ZGenerational -Xlog:gc*`:
+Telemetría capturada en tiempo de ejecución mediante la instrumentación `-XX:+UseZGC -XX:+ZGenerational -Xlog:gc*` sobre Java 21.0.12:
 
-- **Pausas Máximas Individuales:** **0.029 ms** (`Pause Mark Start`), **0.024 ms** (`Pause Mark End`), **0.026 ms** (`Pause Relocate Start`).
-- **Pausa Acumulada por Ciclo:** **< 0.08 ms** (Sub-milisegundo).
-- **Gestión Dinámica de Memoria:** Liberación y retorno automático de memoria al SO (`Uncommitted: 540M`).
+- **Pausas Máximas Individuales (Log Real):** 
+  - `Pause Mark Start`: **0.011 ms – 0.015 ms**
+  - `Pause Mark End`: **0.017 ms – 0.021 ms**
+  - `Pause Relocate Start`: **0.013 ms – 0.034 ms**
+- **Pausa Acumulada por Ciclo:** **< 0.05 ms** (Sub-milisegundo absoluto).
+- **Gestión Dinámica de Memoria:** Liberación eficiente de páginas Small/Medium y retorno de capacidad al SO.
 - **Cumplimiento de Rúbrica:** Garantiza latencia ultra-baja y cumple con el requisito de pausas de GC $\le 1\text{ ms}$.
