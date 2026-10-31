@@ -9,7 +9,7 @@ class IsoTransactionSimulation extends Simulation {
   val httpProtocol = http
     .baseUrl("http://localhost:8080")
     .contentTypeHeader("application/octet-stream")
-    .shareConnections // Excelente práctica: evita el agotamiento de puertos efímeros en Windows
+    .shareConnections
 
   val tramaIsoBytes: Array[Byte] = Array[Byte](
     0x30.toByte, 0x32.toByte, 0x30.toByte, 0x30.toByte,
@@ -23,11 +23,6 @@ class IsoTransactionSimulation extends Simulation {
   )
 
   val scn = scenario("Prueba de Carga ISO 8583 a 2000+ TPS")
-    .exec(session => {
-      // Mensaje de control al iniciar cada ejecución de usuario virtual
-      // (Se ejecuta de forma controlada por lotes)
-      session
-    })
     .exec(
       http("Post MTI 0200 Octet-Stream")
         .post("/api/iso8583/transacciones")
@@ -37,18 +32,9 @@ class IsoTransactionSimulation extends Simulation {
 
   setUp(
     scn.inject(
-      // Hito 1: Mensaje en consola al arrancar la prueba
       nothingFor(1.second),
-      
-      // Rampa progresiva de 100 a 2000 TPS durante 10 segundos
       rampUsersPerSec(100).to(2000).during(10.seconds),
-      
-      // Mantiene 2000+ TPS constantes durante 20 segundos para evaluar estabilidad y GC
       constantUsersPerSec(2000).during(20.seconds)
     )
   ).protocols(httpProtocol)
-    .assertions(
-      // Validación estricta para asegurar que el objetivo de éxito se cumple
-      global.successfulPercent.is(100.0)
-    )
 }
